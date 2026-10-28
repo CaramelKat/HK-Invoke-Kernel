@@ -239,13 +239,16 @@ static void hci_cc_read_local_name(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct hci_rp_read_local_name *rp = (void *) skb->data;
 
-	BT_DBG("%s status 0x%2.2x", hdev->name, rp->status);
+	BT_DBG("hci_cc_read_local_name - %s status 0x%2.2x", hdev->name, rp->status);
 
 	if (rp->status)
 		return;
 
 	if (test_bit(HCI_SETUP, &hdev->dev_flags))
+	{
+		BT_DBG("hci_cc_read_local_name - %s ", rp->name);
 		memcpy(hdev->dev_name, rp->name, HCI_MAX_NAME_LENGTH);
+	}
 }
 
 static void hci_cc_write_auth_enable(struct hci_dev *hdev, struct sk_buff *skb)
@@ -708,6 +711,7 @@ static void hci_setup_link_policy(struct hci_dev *hdev)
 		link_policy |= HCI_LP_PARK;
 
 	cp.policy = cpu_to_le16(link_policy);
+	printk("hci_setup_link_policy %x \n", link_policy);
 	hci_send_cmd(hdev, HCI_OP_WRITE_DEF_LINK_POLICY, sizeof(cp), &cp);
 }
 
@@ -2463,6 +2467,8 @@ static void hci_cmd_complete_evt(struct hci_dev *hdev, struct sk_buff *skb)
 
 	opcode = __le16_to_cpu(ev->opcode);
 
+	//printk("arun: hci_event.c - hci_cmd_complete_evt : 0x%x\n",opcode);
+
 	switch (opcode) {
 	case HCI_OP_INQUIRY_CANCEL:
 		hci_cc_inquiry_cancel(hdev, skb);
@@ -4033,6 +4039,8 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 
 	skb_pull(skb, HCI_EVENT_HDR_SIZE);
 
+	//printk("arun: hci_event.c - hci_event_packet : 0x%x\n",event);
+	
 	switch (event) {
 	case HCI_EV_INQUIRY_COMPLETE:
 		hci_inquiry_complete_evt(hdev, skb);

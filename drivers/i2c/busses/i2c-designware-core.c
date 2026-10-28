@@ -167,6 +167,7 @@ static char *abort_sources[] = {
 u32 dw_readl(struct dw_i2c_dev *dev, int offset)
 {
 	u32 value;
+	//printk("Libre : DW I2C Read\n");
 
 	if (dev->accessor_flags & ACCESS_16BIT)
 		value = readw(dev->base + offset) |
@@ -182,6 +183,8 @@ u32 dw_readl(struct dw_i2c_dev *dev, int offset)
 
 void dw_writel(struct dw_i2c_dev *dev, u32 b, int offset)
 {
+
+	//printk("Libre : DW I2C Write\n");
 	if (dev->accessor_flags & ACCESS_SWAP)
 		b = swab32(b);
 
@@ -343,6 +346,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 {
 	struct i2c_msg *msgs = dev->msgs;
 	u32 ic_con;
+	//printk("Libre : I2C : i2c_dw_xfer_init Called\n");
 
 	/* Disable the adapter */
 	dw_writel(dev, 0, DW_IC_ENABLE);
@@ -363,6 +367,7 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 
 	/* Enable interrupts */
 	dw_writel(dev, DW_IC_INTR_DEFAULT_MASK, DW_IC_INTR_MASK);
+	//printk("Libre : I2C : i2c_dw_xfer_init Called Finished\n");
 }
 
 /*
@@ -380,6 +385,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 	u32 addr = msgs[dev->msg_write_idx].addr;
 	u32 buf_len = dev->tx_buf_len;
 	u8 *buf = dev->tx_buf;
+	//printk("Libre : I2C : i2c_dw_xfer_msg Called\n");
 
 	intr_mask = DW_IC_INTR_DEFAULT_MASK;
 
@@ -512,8 +518,10 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
 	struct dw_i2c_dev *dev = i2c_get_adapdata(adap);
 	int ret;
+	
 
 	dev_dbg(dev->dev, "%s: msgs: %d\n", __func__, num);
+	//printk("Libre : I2C : i2c_dw_xfer Called\n");
 
 	mutex_lock(&dev->lock);
 	pm_runtime_get_sync(dev->dev);
@@ -568,6 +576,7 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 done:
 	pm_runtime_put(dev->dev);
 	mutex_unlock(&dev->lock);
+	//printk("Libre : I2C : i2c_dw_xfer Called Finished : %x %d\n",ret,ret);
 
 	return ret;
 }

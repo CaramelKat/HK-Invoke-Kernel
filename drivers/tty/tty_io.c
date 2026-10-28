@@ -111,11 +111,14 @@
 #define CHECK_TTY_COUNT 1
 
 struct ktermios tty_std_termios = {	/* for the benefit of tty drivers  */
-	.c_iflag = ICRNL | IXON,
-	.c_oflag = OPOST | ONLCR,
+	//.c_iflag = IXON | ICRNL,
+	//.c_oflag = OPOST |ONLCR,
+	//.c_iflag = IXON,
+	//.c_oflag = OPOST ,
 	.c_cflag = B38400 | CS8 | CREAD | HUPCL,
-	.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
-		   ECHOCTL | ECHOKE | IEXTEN,
+	/*.c_lflag = ISIG | ICANON | ECHO | ECHOE | ECHOK |
+		   ECHOCTL | ECHOKE | IEXTEN,*/
+	.c_lflag = 0,	   
 	.c_cc = INIT_C_CC,
 	.c_ispeed = 38400,
 	.c_ospeed = 38400
@@ -941,6 +944,14 @@ void start_tty(struct tty_struct *tty)
 
 EXPORT_SYMBOL(start_tty);
 
+/* We limit tty time update visibility to every 8 seconds or so. */
+static void tty_update_time(struct timespec *time)
+{
+	unsigned long sec = get_seconds() & ~7;
+	if ((long)(sec - time->tv_sec) > 0)
+		time->tv_sec = sec;
+}
+
 /**
  *	tty_read	-	read method for tty device files
  *	@file: pointer to tty file
@@ -977,8 +988,10 @@ static ssize_t tty_read(struct file *file, char __user *buf, size_t count,
 	else
 		i = -EIO;
 	tty_ldisc_deref(ld);
+
 	if (i > 0)
-		inode->i_atime = current_fs_time(inode->i_sb);
+		tty_update_time(&inode->i_atime);
+
 	return i;
 }
 
@@ -1081,7 +1094,7 @@ static inline ssize_t do_tty_write(
 	}
 	if (written) {
 		struct inode *inode = file->f_path.dentry->d_inode;
-		inode->i_mtime = current_fs_time(inode->i_sb);
+		tty_update_time(&inode->i_mtime);
 		ret = written;
 	}
 out:
@@ -2633,10 +2646,17 @@ EXPORT_SYMBOL(tty_pair_get_pty);
 /*
  * Split this up, as gcc can choke on it otherwise..
  */
+extern void suspend_console(void);
+
+//extern struct console * v_store_console;
+extern unsigned char readLuciData[];
+extern unsigned int readLuciDataIdx;
+
 long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct tty_struct *tty = file_tty(file);
 	struct tty_struct *real_tty;
+	char buffer[1300];
 	void __user *p = (void __user *)arg;
 	int retval;
 	struct tty_ldisc *ld;
@@ -2651,11 +2671,31 @@ long tty_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	 * Factor out some common prep work
 	 */
 	switch (cmd) {
+	case 0x1234:
+		//if(readLuciDataIdx)
+	//	{
+			buffer[0] = readLuciDataIdx & 0xff;
+			buffer[1] = readLuciDataIdx >>8;
+			if(readLuciDataIdx){
+				memcpy(&buffer[2],readLuciData,readLuciDataIdx);
+				memcpy(arg,buffer,readLuciDataIdx+2);
+			}
+			else
+				memcpy(arg,buffer,2); // no packets received, still send  no. of bytes received which is zero
+			
+			readLuciDataIdx = 0;
+	//	}
+			
+		//printk("ajith:ioctl called\n");
+		//console_stop( v_store_console);
+		//suspend_console();
+		//printk("console stop: %x",v_store_console);
+		return;
 	case TIOCSETD:
 	case TIOCSBRK:
 	case TIOCCBRK:
 	case TCSBRK:
-	case TCSBRKP:
+	case TCSBRKP:	
 		retval = tty_check_change(tty);
 		if (retval)
 			return retval;

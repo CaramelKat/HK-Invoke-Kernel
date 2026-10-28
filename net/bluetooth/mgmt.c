@@ -328,7 +328,7 @@ static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 	u16 count;
 	int err;
 
-	BT_DBG("sock %p", sk);
+	BT_DBG("arun: mgmt.c - read_index_list -sock %p", sk);
 
 	read_lock(&hci_dev_list_lock);
 
@@ -351,6 +351,9 @@ static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 	list_for_each_entry(d, &hci_dev_list, list) {
 		if (test_bit(HCI_SETUP, &d->dev_flags))
 			continue;
+		if (test_bit(HCI_USER_CHANNEL, &d->dev_flags))
+			continue;
+
 
 		if (!mgmt_valid_hdev(d))
 			continue;
@@ -643,6 +646,7 @@ static void service_cache_off(struct work_struct *work)
 
 static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 {
+	printk("arun: mgmt.c - init_hdev\n");
 	if (test_and_set_bit(HCI_MGMT, &hdev->dev_flags))
 		return;
 
@@ -2763,7 +2767,7 @@ int mgmt_control(struct sock *sk, struct msghdr *msg, size_t msglen)
 	const struct mgmt_handler *handler;
 	int err;
 
-	BT_DBG("got %zu bytes", msglen);
+	BT_DBG("arun: mgmt.c -mgmt_control - got %zu bytes", msglen);
 
 	if (msglen < sizeof(*hdr))
 		return -EINVAL;
@@ -2790,6 +2794,12 @@ int mgmt_control(struct sock *sk, struct msghdr *msg, size_t msglen)
 	if (index != MGMT_INDEX_NONE) {
 		hdev = hci_dev_get(index);
 		if (!hdev) {
+			err = cmd_status(sk, index, opcode,
+					 MGMT_STATUS_INVALID_INDEX);
+			goto done;
+		}
+	
+		if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
 			err = cmd_status(sk, index, opcode,
 					 MGMT_STATUS_INVALID_INDEX);
 			goto done;

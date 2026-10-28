@@ -57,8 +57,12 @@ extern int nand_unlock(struct mtd_info *mtd, loff_t ofs, uint64_t len);
  * adjust this accordingly.
  */
 #define NAND_MAX_OOBSIZE	640
-#define NAND_MAX_PAGESIZE	8192
+#define NAND_MAX_PAGESIZE	16384
 
+#define MTD_SINGLE_PLANE	1
+#define MTD_DUAL_PLANE		2
+#define MTD_ESLC		3
+#define MTD_SLC			4
 /*
  * Constants for hardware specific CLE/ALE/NCE function
  *
@@ -187,6 +191,13 @@ typedef enum {
  * This happens with the Renesas AG-AND chips, possibly others.
  */
 #define BBT_AUTO_REFRESH	0x00000080
+/*
+ * Chip requires ready check on read (for auto-incremented sequential read).
+ * True only for small page devices; large page devices do not support
+ * autoincrement.
+ */
+#define NAND_NEED_READRDY	0x00000100
+
 /* Chip does not allow subpage writes */
 #define NAND_NO_SUBPAGE_WRITE	0x00000200
 
@@ -526,6 +537,7 @@ struct nand_chip {
 			int feature_addr, uint8_t *subfeature_para);
 	int (*onfi_get_features)(struct mtd_info *mtd, struct nand_chip *chip,
 			int feature_addr, uint8_t *subfeature_para);
+	int (*get_mtd_info)(struct mtd_info *mtd, loff_t off, loff_t *dst);
 
 	int chip_delay;
 	unsigned int options;

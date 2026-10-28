@@ -507,16 +507,19 @@ EXPORT_SYMBOL_GPL(i2c_unlock_adapter);
 struct i2c_client *
 i2c_new_device(struct i2c_adapter *adap, struct i2c_board_info const *info)
 {
+
 	struct i2c_client	*client;
 	int			status;
 
 	client = kzalloc(sizeof *client, GFP_KERNEL);
 	if (!client)
 		return NULL;
+	
 
 	client->adapter = adap;
 
 	client->dev.platform_data = info->platform_data;
+	
 
 	if (info->archdata)
 		client->dev.archdata = *info->archdata;
@@ -524,6 +527,7 @@ i2c_new_device(struct i2c_adapter *adap, struct i2c_board_info const *info)
 	client->flags = info->flags;
 	client->addr = info->addr;
 	client->irq = info->irq;
+	
 
 	strlcpy(client->name, info->type, sizeof(client->name));
 
@@ -535,10 +539,15 @@ i2c_new_device(struct i2c_adapter *adap, struct i2c_board_info const *info)
 		goto out_err_silent;
 	}
 
+
 	/* Check for address business */
 	status = i2c_check_addr_busy(adap, client->addr);
 	if (status)
+	{
+		
 		goto out_err;
+	}
+	
 
 	client->dev.parent = &client->adapter->dev;
 	client->dev.bus = &i2c_bus_type;
@@ -546,21 +555,26 @@ i2c_new_device(struct i2c_adapter *adap, struct i2c_board_info const *info)
 	client->dev.of_node = info->of_node;
 	ACPI_HANDLE_SET(&client->dev, info->acpi_node.handle);
 
+
 	/* For 10-bit clients, add an arbitrary offset to avoid collisions */
 	dev_set_name(&client->dev, "%d-%04x", i2c_adapter_id(adap),
 		     client->addr | ((client->flags & I2C_CLIENT_TEN)
 				     ? 0xa000 : 0));
 	status = device_register(&client->dev);
 	if (status)
+	{
+		
 		goto out_err;
+	}
 
-	dev_dbg(&adap->dev, "client [%s] registered with bus id %s\n",
+	printk("client [%s] registered with bus id %s\n",
 		client->name, dev_name(&client->dev));
 
 	return client;
 
+	
 out_err:
-	dev_err(&adap->dev, "Failed to register i2c client %s at 0x%02x "
+	printk("Failed to register i2c client %s at 0x%02x "
 		"(%d)\n", client->name, client->addr, status);
 out_err_silent:
 	kfree(client);
@@ -1381,6 +1395,8 @@ EXPORT_SYMBOL(__i2c_transfer);
 int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 {
 	int ret;
+	//printk("Libre : I2C : i2c_transfer Called\n");
+
 
 	/* REVISIT the fault reporting model here is weak:
 	 *
@@ -1412,18 +1428,22 @@ int i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		if (in_atomic() || irqs_disabled()) {
 			ret = i2c_trylock_adapter(adap);
 			if (!ret)
+				{
 				/* I2C activity is ongoing. */
+				printk("i2c activity going on\n");
 				return -EAGAIN;
+				}
 		} else {
 			i2c_lock_adapter(adap);
 		}
 
 		ret = __i2c_transfer(adap, msgs, num);
 		i2c_unlock_adapter(adap);
-
+		
 		return ret;
 	} else {
 		dev_dbg(&adap->dev, "I2C level transfers not supported\n");
+		printk("i2c failed\n");
 		return -EOPNOTSUPP;
 	}
 }
@@ -1442,7 +1462,9 @@ int i2c_master_send(const struct i2c_client *client, const char *buf, int count)
 	int ret;
 	struct i2c_adapter *adap = client->adapter;
 	struct i2c_msg msg;
+	//printk("Libre : I2C : i2c_master_send Called\n");
 
+	
 	msg.addr = client->addr;
 	msg.flags = client->flags & I2C_M_TEN;
 	msg.len = count;
@@ -1454,6 +1476,7 @@ int i2c_master_send(const struct i2c_client *client, const char *buf, int count)
 	 * If everything went ok (i.e. 1 msg transmitted), return #bytes
 	 * transmitted, else error code.
 	 */
+
 	return (ret == 1) ? count : ret;
 }
 EXPORT_SYMBOL(i2c_master_send);
@@ -1470,7 +1493,7 @@ int i2c_master_recv(const struct i2c_client *client, char *buf, int count)
 {
 	struct i2c_adapter *adap = client->adapter;
 	struct i2c_msg msg;
-	int ret;
+	int ret,i=0;
 
 	msg.addr = client->addr;
 	msg.flags = client->flags & I2C_M_TEN;
@@ -1479,6 +1502,8 @@ int i2c_master_recv(const struct i2c_client *client, char *buf, int count)
 	msg.buf = buf;
 
 	ret = i2c_transfer(adap, &msg, 1);
+
+	
 
 	/*
 	 * If everything went ok (i.e. 1 msg received), return #bytes received,

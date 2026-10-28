@@ -241,6 +241,17 @@ config MMC_SDHCI_S3C_DMA
 
 	  YMMV.
 
+config MMC_SDHCI_MV
+	tristate "Marvell Berlin SD/MMC Host Controller support"
+	depends on ARCH_BERLIN
+	depends on MMC_SDHCI_PLTFM
+	select MMC_SDHCI_IO_ACCESSORS
+	help
+	  This selects the Berlin SD/MMC controller. If you have a Berlin
+	  platform with SD or MMC devices, say Y or M here.
+
+	  If unsure, say N.
+
 config MMC_OMAP
 	tristate "TI OMAP Multimedia Card Interface support"
 	depends on ARCH_OMAP
@@ -289,16 +300,6 @@ config MMC_ATMELMCI
 	  This selects the Atmel Multimedia Card Interface driver. If
 	  you have an AT32 (AVR32) or AT91 platform with a Multimedia
 	  Card slot, say Y or M here.
-
-	  If unsure, say N.
-
-config MMC_ATMELMCI_DMA
-	bool "Atmel MCI DMA support"
-	depends on MMC_ATMELMCI && (AVR32 || ARCH_AT91SAM9G45) && DMA_ENGINE
-	help
-	  Say Y here to have the Atmel MCI driver use a DMA engine to
-	  do data transfers and thus increase the throughput and
-	  reduce the CPU utilization.
 
 	  If unsure, say N.
 

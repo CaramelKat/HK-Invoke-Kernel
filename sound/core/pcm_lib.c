@@ -32,6 +32,7 @@
 #include <sound/pcm_params.h>
 #include <sound/timer.h>
 
+
 /*
  * fill ring buffer with silence
  * runtime->silence_start: starting pointer to silence area
@@ -295,6 +296,7 @@ int snd_pcm_update_state(struct snd_pcm_substream *substream,
 	} else {
 		if (avail >= runtime->stop_threshold) {
 			xrun(substream);
+			printk("Libresnd XXXRUNN Avail[%u] Thrsld[%u] \n",avail, runtime->stop_threshold);
 			return -EPIPE;
 		}
 	}
@@ -1906,7 +1908,7 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 			goto _endloop;
 		}
 		if (!tout) {
-			snd_printd("%s write error (DMA or IRQ trouble?)\n",
+			 printk("Libresnd:%s Timed out, Pegged??\n",
 				   is_playback ? "playback" : "capture");
 			err = -EIO;
 			break;
@@ -2029,11 +2031,11 @@ static snd_pcm_sframes_t snd_pcm_lib_write1(struct snd_pcm_substream *substream,
 		size -= frames;
 		xfer += frames;
 		avail -= frames;
-		if (runtime->status->state == SNDRV_PCM_STATE_PREPARED &&
-		    snd_pcm_playback_hw_avail(runtime) >= (snd_pcm_sframes_t)runtime->start_threshold) {
-			err = snd_pcm_start(substream);
-			if (err < 0)
-				goto _end_unlock;
+			if (runtime->status->state == SNDRV_PCM_STATE_PREPARED &&
+			    snd_pcm_playback_hw_avail(runtime) >= (snd_pcm_sframes_t)runtime->start_threshold) {
+				err = snd_pcm_start(substream);
+				if (err < 0)
+					goto _end_unlock;
 		}
 	}
  _end_unlock:

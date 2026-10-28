@@ -121,6 +121,7 @@ obj-$(CONFIG_SENSORS_THMC50)	+= thmc50.o
 obj-$(CONFIG_SENSORS_TMP102)	+= tmp102.o
 obj-$(CONFIG_SENSORS_TMP401)	+= tmp401.o
 obj-$(CONFIG_SENSORS_TMP421)	+= tmp421.o
+obj-$(CONFIG_SENSORS_TSEN_ADC33)+= tsen-adc33.o
 obj-$(CONFIG_SENSORS_TWL4030_MADC)+= twl4030-madc-hwmon.o
 obj-$(CONFIG_SENSORS_VEXPRESS)	+= vexpress.o
 obj-$(CONFIG_SENSORS_VIA_CPUTEMP)+= via-cputemp.o

@@ -80,6 +80,13 @@ $(obj)/uImage:	$(obj)/zImage FORCE
 	$(call if_changed,uimage)
 	@$(kecho) '  Image $@ is ready'
 
+$(obj)/zImage-dtb.%:	$(obj)/dts/%.dtb $(obj)/zImage FORCE
+	cat $(obj)/zImage $< > $@
+
+$(obj)/uImage-dtb.%:	$(obj)/zImage-dtb.% FORCE
+	$(call if_changed,uimage)
+	@echo '  Image $@ is ready'
+
 $(obj)/bootp/bootp: $(obj)/zImage initrd FORCE
 	$(Q)$(MAKE) $(build)=$(obj)/bootp $@
 	@:

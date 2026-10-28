@@ -32,6 +32,8 @@
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
+#include <net/bluetooth/hci.h>
+//#include <linux/errno.h>
 
 static void hci_rx_work(struct work_struct *work);
 static void hci_cmd_work(struct work_struct *work);
@@ -115,6 +117,7 @@ static int __hci_request(struct hci_dev *hdev,
 	int err = 0;
 
 	BT_DBG("%s start", hdev->name);
+	//printk("arun: hci_core.c - hci_request : name = %s\n", hdev->name);
 
 	hdev->req_status = HCI_REQ_PEND;
 
@@ -205,7 +208,8 @@ static void hci_init_req(struct hci_dev *hdev, unsigned long opt)
 {
 	struct sk_buff *skb;
 
-	BT_DBG("%s %ld", hdev->name, opt);
+	BT_DBG("arun: hci_core.c - hci_init_req = %s %ld\n", hdev->name, opt);
+	//printk("arun: hci_core.c - hci_init_req = %s %ld", hdev->name, opt);
 
 	/* Driver initialization */
 
@@ -284,7 +288,7 @@ struct hci_dev *hci_dev_get(int index)
 {
 	struct hci_dev *hdev = NULL, *d;
 
-	BT_DBG("%d", index);
+	BT_DBG("hci_core.c - hci_dev_get = %d", index);
 
 	if (index < 0)
 		return NULL;
@@ -544,6 +548,10 @@ int hci_inquiry(void __user *arg)
 	hdev = hci_dev_get(ir.dev_id);
 	if (!hdev)
 		return -ENODEV;
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
+		err = -EBUSY;
+		goto done;
+	}
 
 	hci_dev_lock(hdev);
 	if (inquiry_cache_age(hdev) > INQUIRY_CACHE_AGE_MAX ||
@@ -660,6 +668,7 @@ int hci_update_ad(struct hci_dev *hdev)
 	u8 len;
 	int err;
 
+	//printk("arun: hci_core.c - hci_update_ad\n");
 	hci_dev_lock(hdev);
 
 	if (!lmp_le_capable(hdev)) {
@@ -696,10 +705,12 @@ int hci_dev_open(__u16 dev)
 	struct hci_dev *hdev;
 	int ret = 0;
 
+	//printk("arun: hci_core.c - hci_dev_open:dev = 0x%x\n", dev);
 	hdev = hci_dev_get(dev);
 	if (!hdev)
 		return -ENODEV;
 
+	//printk("arun: hci_core.c - hci_dev_open: %s %p\n", hdev->name, hdev);
 	BT_DBG("%s %p", hdev->name, hdev);
 
 	hci_req_lock(hdev);
@@ -732,7 +743,8 @@ int hci_dev_open(__u16 dev)
 		goto done;
 	}
 
-	if (!test_bit(HCI_RAW, &hdev->flags)) {
+	if (!test_bit(HCI_RAW, &hdev->flags) &&
+	!test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)){
 		atomic_set(&hdev->cmd_cnt, 1);
 		set_bit(HCI_INIT, &hdev->flags);
 		hdev->init_last_cmd = 0;
@@ -748,6 +760,7 @@ int hci_dev_open(__u16 dev)
 		hci_notify(hdev, HCI_DEV_UP);
 		hci_update_ad(hdev);
 		if (!test_bit(HCI_SETUP, &hdev->dev_flags) &&
+		!test_bit(HCI_USER_CHANNEL, &hdev->dev_flags) &&
 		    mgmt_valid_hdev(hdev)) {
 			hci_dev_lock(hdev);
 			mgmt_powered(hdev, 1);
@@ -782,7 +795,7 @@ done:
 
 static int hci_dev_do_close(struct hci_dev *hdev)
 {
-	BT_DBG("%s %p", hdev->name, hdev);
+	BT_DBG("%s hci_dev_do_close - %p", hdev->name, hdev);
 
 	cancel_work_sync(&hdev->le_scan);
 
@@ -881,12 +894,17 @@ int hci_dev_close(__u16 dev)
 	hdev = hci_dev_get(dev);
 	if (!hdev)
 		return -ENODEV;
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
+		err = -EBUSY;
+		goto done;
+	}
+
 
 	if (test_and_clear_bit(HCI_AUTO_OFF, &hdev->dev_flags))
 		cancel_delayed_work(&hdev->power_off);
 
 	err = hci_dev_do_close(hdev);
-
+done:
 	hci_dev_put(hdev);
 	return err;
 }
@@ -904,6 +922,12 @@ int hci_dev_reset(__u16 dev)
 
 	if (!test_bit(HCI_UP, &hdev->flags))
 		goto done;
+
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
+		ret = -EBUSY;
+		goto done;
+	}
+
 
 	/* Drop queues */
 	skb_queue_purge(&hdev->rx_q);
@@ -938,8 +962,13 @@ int hci_dev_reset_stat(__u16 dev)
 	if (!hdev)
 		return -ENODEV;
 
-	memset(&hdev->stat, 0, sizeof(struct hci_dev_stats));
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
+		ret = -EBUSY;
+		goto done;
+	}
 
+	memset(&hdev->stat, 0, sizeof(struct hci_dev_stats));
+done:
 	hci_dev_put(hdev);
 
 	return ret;
@@ -957,6 +986,10 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 	hdev = hci_dev_get(dr.dev_id);
 	if (!hdev)
 		return -ENODEV;
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
+		err = -EBUSY;
+		goto done;
+	}
 
 	switch (cmd) {
 	case HCISETAUTH:
@@ -1015,7 +1048,7 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 		err = -EINVAL;
 		break;
 	}
-
+done:
 	hci_dev_put(hdev);
 	return err;
 }
@@ -1123,6 +1156,8 @@ static int hci_rfkill_set_block(void *data, bool blocked)
 	struct hci_dev *hdev = data;
 
 	BT_DBG("%p name %s blocked %d", hdev, hdev->name, blocked);
+	if (test_bit(HCI_USER_CHANNEL, &hdev->dev_flags))
+		return -EBUSY;
 
 	if (!blocked)
 		return 0;
@@ -1138,16 +1173,22 @@ static const struct rfkill_ops hci_rfkill_ops = {
 
 static void hci_power_on(struct work_struct *work)
 {
+	int err;
+	//printk("arun: hci_core.c - hci_power_on\n");
 	struct hci_dev *hdev = container_of(work, struct hci_dev, power_on);
 
 	BT_DBG("%s", hdev->name);
-
-	if (hci_dev_open(hdev->id) < 0)
+#if 0
+	err =hci_dev_open(hdev->id); 
+	if (err < 0)
+		{
+		//printk("hci_dev_open: error %d",(err));
 		return;
+		}
 
 	if (test_bit(HCI_AUTO_OFF, &hdev->dev_flags))
 		schedule_delayed_work(&hdev->power_off, HCI_AUTO_OFF_TIMEOUT);
-
+#endif
 	if (test_and_clear_bit(HCI_SETUP, &hdev->dev_flags))
 		mgmt_index_added(hdev);
 }
@@ -1157,7 +1198,7 @@ static void hci_power_off(struct work_struct *work)
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
 					    power_off.work);
 
-	BT_DBG("%s", hdev->name);
+	BT_DBG("arun: hci_core.c - hci_power_off = %s", hdev->name);
 
 	hci_dev_do_close(hdev);
 }
@@ -1169,7 +1210,7 @@ static void hci_discov_off(struct work_struct *work)
 
 	hdev = container_of(work, struct hci_dev, discov_off.work);
 
-	BT_DBG("%s", hdev->name);
+	BT_DBG("hci_discov_off = %s", hdev->name);
 
 	hci_dev_lock(hdev);
 
@@ -1431,7 +1472,7 @@ static void hci_cmd_timeout(unsigned long arg)
 		struct hci_command_hdr *sent = (void *) hdev->sent_cmd->data;
 		u16 opcode = __le16_to_cpu(sent->opcode);
 
-		BT_ERR("%s command 0x%4.4x tx timeout", hdev->name, opcode);
+		BT_ERR("hci_cmd_timeout - %s command 0x%4.4x tx timeout", hdev->name, opcode);
 	} else {
 		BT_ERR("%s command tx timeout", hdev->name);
 	}
@@ -1697,6 +1738,7 @@ struct hci_dev *hci_alloc_dev(void)
 {
 	struct hci_dev *hdev;
 
+	//printk("arun: hci_core.c  - hci_alloc_dev\n");
 	hdev = kzalloc(sizeof(struct hci_dev), GFP_KERNEL);
 	if (!hdev)
 		return NULL;
@@ -1787,6 +1829,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	hdev->id = id;
 
 	BT_DBG("%p name %s bus %d", hdev, hdev->name, hdev->bus);
+	//printk("arun: hci_core.c - hci_register_dev : dev, name, bus = %p  %s  %d\n", hdev, hdev->name, hdev->bus);
 
 	write_lock(&hci_dev_list_lock);
 	list_add(&hdev->list, &hci_dev_list);
@@ -1914,6 +1957,7 @@ EXPORT_SYMBOL(hci_resume_dev);
 /* Receive frame from HCI drivers */
 int hci_recv_frame(struct sk_buff *skb)
 {
+	//printk("arun: hci_core.c - hci_recv_frame\n");
 	struct hci_dev *hdev = (struct hci_dev *) skb->dev;
 	if (!hdev || (!test_bit(HCI_UP, &hdev->flags)
 		      && !test_bit(HCI_INIT, &hdev->flags))) {
@@ -2134,6 +2178,7 @@ static int hci_send_frame(struct sk_buff *skb)
 	}
 
 	BT_DBG("%s type %d len %d", hdev->name, bt_cb(skb)->pkt_type, skb->len);
+	//printk("arun: hci_core.c - hci_send_frame = 	%s type %d len %d\n", hdev->name, bt_cb(skb)->pkt_type, skb->len);
 
 	/* Time stamp */
 	__net_timestamp(skb);
@@ -2159,6 +2204,7 @@ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen, void *param)
 	struct hci_command_hdr *hdr;
 	struct sk_buff *skb;
 
+	//printk("arun: hci_core.c - hci_send_cmd : %s opcode 0x%4.4x plen %d\n", hdev->name, opcode, plen);
 	BT_DBG("%s opcode 0x%4.4x plen %d", hdev->name, opcode, plen);
 
 	skb = bt_skb_alloc(len, GFP_ATOMIC);
@@ -2857,7 +2903,7 @@ static void hci_rx_work(struct work_struct *work)
 	struct hci_dev *hdev = container_of(work, struct hci_dev, rx_work);
 	struct sk_buff *skb;
 
-	BT_DBG("%s", hdev->name);
+	BT_DBG("arun: hci_core.c -hci_rx_work = %s", hdev->name);
 
 	while ((skb = skb_dequeue(&hdev->rx_q))) {
 		/* Send copy to monitor */
@@ -2868,7 +2914,8 @@ static void hci_rx_work(struct work_struct *work)
 			hci_send_to_sock(hdev, skb);
 		}
 
-		if (test_bit(HCI_RAW, &hdev->flags)) {
+		if (test_bit(HCI_RAW, &hdev->flags) ||
+		    test_bit(HCI_USER_CHANNEL, &hdev->dev_flags)) {
 			kfree_skb(skb);
 			continue;
 		}
@@ -2914,6 +2961,8 @@ static void hci_cmd_work(struct work_struct *work)
 
 	BT_DBG("%s cmd_cnt %d cmd queued %d", hdev->name,
 	       atomic_read(&hdev->cmd_cnt), skb_queue_len(&hdev->cmd_q));
+	//printk("arun: hci_core.c -hci_cmd_work = %s cmd_cnt %d cmd queued %d\n", hdev->name,
+	//       atomic_read(&hdev->cmd_cnt), skb_queue_len(&hdev->cmd_q));
 
 	/* Send queued commands */
 	if (atomic_read(&hdev->cmd_cnt)) {

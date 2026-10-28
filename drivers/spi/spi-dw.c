@@ -371,7 +371,7 @@ static void poll_transfer(struct dw_spi *dws)
 
 	dw_spi_xfer_done(dws);
 }
-
+volatile u32* gpioreg;
 static void pump_transfers(unsigned long data)
 {
 	struct dw_spi *dws = (struct dw_spi *)data;
@@ -416,6 +416,8 @@ static void pump_transfers(unsigned long data)
 		if (previous->delay_usecs)
 			udelay(previous->delay_usecs);
 	}
+	gpioreg = (volatile u32*)0xF7E80450;
+               while((*gpioreg & 0x2000) == 0);
 
 	dws->n_bytes = chip->n_bytes;
 	dws->dma_width = chip->dma_width;
@@ -438,7 +440,8 @@ static void pump_transfers(unsigned long data)
 	if (transfer->speed_hz) {
 		speed = chip->speed_hz;
 
-		if (transfer->speed_hz != speed) {
+		//if (transfer->speed_hz != speed) {
+			{
 			speed = transfer->speed_hz;
 			if (speed > dws->max_freq) {
 				printk(KERN_ERR "MRST SPI0: unsupported"

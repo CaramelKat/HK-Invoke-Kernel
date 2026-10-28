@@ -499,6 +499,16 @@ config USB_SWITCH_FSA9480
 	  stereo and mono audio, video, microphone and UART data to use
 	  a common connector port.
 
+config FLASH_TS
+	bool  "Flash-based transactional key-value store"
+	depends on MTD
+	select CRC32
+
+config FLASH_TS_PARTITION
+	string "MTD partition containing store"
+	depends on FLASH_TS
+	default "fts"
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

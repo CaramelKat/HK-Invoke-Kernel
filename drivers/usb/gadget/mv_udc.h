@@ -81,6 +81,8 @@
 #define USB_EP_LIST_ADDRESS_MASK              0xfffff800
 
 #define PORTSCX_W1C_BITS			0x2a
+#define PORTSCX_PORT_DM				(1 << 10)
+#define PORTSCX_PORT_DP				(1 << 11)
 #define PORTSCX_PORT_RESET			0x00000100
 #define PORTSCX_PORT_POWER			0x00001000
 #define PORTSCX_FORCE_FULL_SPEED_CONNECT	0x01000000
@@ -180,7 +182,6 @@ struct mv_udc {
 
 	struct mv_cap_regs __iomem	*cap_regs;
 	struct mv_op_regs __iomem	*op_regs;
-	void __iomem                    *phy_regs;
 	unsigned int			max_eps;
 	struct mv_dqh			*ep_dqh;
 	size_t				ep_dqh_size;
@@ -210,20 +211,22 @@ struct mv_udc {
 				remote_wakeup:1,
 				softconnected:1,
 				force_fs:1,
-				clock_gating:1,
+				//clock_gating:1,
 				active:1,
 				stopped:1;      /* stop bit is setted */
 
 	struct work_struct	vbus_work;
 	struct workqueue_struct *qwork;
 
+	unsigned int		power;
+	struct work_struct event_work;
+	struct usb_phy		*phy;
 	struct usb_phy		*transceiver;
 
-	struct mv_usb_platform_data     *pdata;
+	//struct mv_usb_platform_data     *pdata;
 
 	/* some SOC has mutiple clock sources for USB*/
-	unsigned int    clknum;
-	struct clk      *clk[0];
+	//struct clk      *clk;
 };
 
 /* endpoint data structure */

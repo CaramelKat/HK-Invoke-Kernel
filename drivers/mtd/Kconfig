@@ -210,6 +210,15 @@ config MTD_BLOCK_RO
 	  You do not need this option for use with the DiskOnChip devices. For
 	  those, enable NFTL support (CONFIG_NFTL) instead.
 
+config MTD_BLOCK_RO_SKIP_BAD_BLOCKS
+	bool "Skip bad blocks"
+	depends on MTD_BLOCK_RO
+	default n
+	help
+	  This option hides bad flash blocks (common for NAND) decreasing
+	  block device size accordingly. Use it if you want to use mtdblock_ro
+	  device with read-only filesystems like cramfs or squashfs and NAND flashes.
+
 config FTL
 	tristate "FTL (Flash Translation Layer) support"
 	depends on BLOCK

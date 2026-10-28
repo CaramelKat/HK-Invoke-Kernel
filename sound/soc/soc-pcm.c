@@ -32,6 +32,12 @@
 #include <sound/initval.h>
 
 #define DPCM_MAX_BE_USERS	8
+#define IRQ_GIC_START          (32)
+#define IRQ_dHubIntrAvio1      (0x22)
+#define IRQ_DHUBINTRAVIO1      (IRQ_GIC_START + IRQ_dHubIntrAvio1)
+
+extern irqreturn_t berlin_devices_aout_isr(int irq, void *dev_id);
+
 
 /* DPCM stream event, send event to FE and all active BEs. */
 static int dpcm_dapm_stream_event(struct snd_soc_pcm_runtime *fe, int dir,
@@ -145,10 +151,10 @@ static int soc_pcm_open(struct snd_pcm_substream *substream)
 	pm_runtime_get_sync(platform->dev);
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
-
+	
 	/* startup the audio subsystem */
-	if (cpu_dai->driver->ops->startup) {
-		ret = cpu_dai->driver->ops->startup(substream, cpu_dai);
+	if (cpu_dai->driver->ops->open) {
+		ret = cpu_dai->driver->ops->open(substream);
 		if (ret < 0) {
 			dev_err(cpu_dai->dev, "ASoC: can't open interface"
 				" %s: %d\n", cpu_dai->name, ret);
@@ -395,8 +401,15 @@ static int soc_pcm_close(struct snd_pcm_substream *substream)
 	if (rtd->dai_link->ops && rtd->dai_link->ops->shutdown)
 		rtd->dai_link->ops->shutdown(substream);
 
-	if (platform->driver->ops && platform->driver->ops->close)
+	if (cpu_dai->driver->ops && cpu_dai->driver->ops->close)
+		{
+			cpu_dai->driver->ops->close(substream);
+		}
+
+
+	if (platform->driver->ops && platform->driver->ops->close) // Mani Added
 		platform->driver->ops->close(substream);
+	
 	cpu_dai->runtime = NULL;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
@@ -439,6 +452,7 @@ static int soc_pcm_prepare(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret = 0;
+	
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
@@ -508,7 +522,7 @@ static int soc_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret = 0;
-
+	
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
 	if (rtd->dai_link->ops && rtd->dai_link->ops->hw_params) {
@@ -581,7 +595,7 @@ static int soc_pcm_hw_free(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_codec *codec = rtd->codec;
-
+	
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
 	/* apply codec digital mute */
@@ -602,6 +616,7 @@ static int soc_pcm_hw_free(struct snd_pcm_substream *substream)
 
 	if (cpu_dai->driver->ops->hw_free)
 		cpu_dai->driver->ops->hw_free(substream, cpu_dai);
+		
 
 	mutex_unlock(&rtd->pcm_mutex);
 	return 0;
@@ -615,6 +630,7 @@ static int soc_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	int ret;
 
+	
 	if (codec_dai->driver->ops->trigger) {
 		ret = codec_dai->driver->ops->trigger(substream, cmd, codec_dai);
 		if (ret < 0)
@@ -628,7 +644,7 @@ static int soc_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	}
 
 	if (cpu_dai->driver->ops->trigger) {
-		ret = cpu_dai->driver->ops->trigger(substream, cmd, cpu_dai);
+		ret = cpu_dai->driver->ops->trigger(substream, cmd,cpu_dai);
 		if (ret < 0)
 			return ret;
 	}
@@ -680,7 +696,10 @@ static snd_pcm_uframes_t soc_pcm_pointer(struct snd_pcm_substream *substream)
 
 	if (platform->driver->ops && platform->driver->ops->pointer)
 		offset = platform->driver->ops->pointer(substream);
-
+		
+	if (cpu_dai->driver->ops && cpu_dai->driver->ops->pointer)
+			offset = cpu_dai->driver->ops->pointer(substream);
+	
 	if (cpu_dai->driver->ops->delay)
 		delay += cpu_dai->driver->ops->delay(substream, cpu_dai);
 
@@ -1664,7 +1683,12 @@ static int soc_pcm_ioctl(struct snd_pcm_substream *substream,
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
 
+	if (cpu_dai->driver->ops->ioctl)
+			return cpu_dai->driver->ops->ioctl(substream, cmd, arg);
+		
+	
 	if (platform->driver->ops->ioctl)
 		return platform->driver->ops->ioctl(substream, cmd, arg);
 	return snd_pcm_lib_ioctl(substream, cmd, arg);
@@ -2011,6 +2035,8 @@ int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num)
 	struct snd_pcm *pcm;
 	char new_name[64];
 	int ret = 0, playback = 0, capture = 0;
+	unsigned int vec_num,err;
+	
 
 	if (rtd->dai_link->dynamic || rtd->dai_link->no_pcm) {
 		if (cpu_dai->driver->playback.channels_min)
@@ -2084,6 +2110,12 @@ int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num)
 		rtd->ops.ioctl		= soc_pcm_ioctl;
 	}
 
+
+	// Added
+	if (cpu_dai->driver->ops) {                         
+		rtd->ops.ack		= cpu_dai->driver->ops->ack;
+		}
+
 	if (platform->driver->ops) {
 		rtd->ops.ack		= platform->driver->ops->ack;
 		rtd->ops.copy		= platform->driver->ops->copy;
@@ -2097,6 +2129,13 @@ int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num)
 
 	if (capture)
 		snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE, &rtd->ops);
+
+
+	// Need pcm instance to request IRQ so we calling from here.
+	/* register and enable audio out ISR */
+	vec_num = IRQ_DHUBINTRAVIO1;
+	err = request_irq(vec_num, berlin_devices_aout_isr, IRQF_DISABLED,
+			"berlin_module_aout", rtd->pcm);
 
 	if (platform->driver->pcm_new) {
 		ret = platform->driver->pcm_new(rtd);

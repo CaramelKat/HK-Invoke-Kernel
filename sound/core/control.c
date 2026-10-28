@@ -1354,6 +1354,8 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	card = ctl->card;
 	if (snd_BUG_ON(!card))
 		return -ENXIO;
+
+	//printk("AnpControl %d ",cmd);
 	switch (cmd) {
 	case SNDRV_CTL_IOCTL_PVERSION:
 		return put_user(SNDRV_CTL_VERSION, ip) ? -EFAULT : 0;

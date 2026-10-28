@@ -136,7 +136,7 @@ struct snd_hwdep_dsp_image {
  *                                                                           *
  *****************************************************************************/
 
-#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 11)
+#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 12)
 
 typedef unsigned long snd_pcm_uframes_t;
 typedef signed long snd_pcm_sframes_t;
@@ -386,7 +386,9 @@ struct snd_pcm_sw_params {
 	snd_pcm_uframes_t silence_threshold;	/* min distance from noise for silence filling */
 	snd_pcm_uframes_t silence_size;		/* silence block size */
 	snd_pcm_uframes_t boundary;		/* pointers wrap point */
-	unsigned char reserved[64];		/* reserved for future */
+	unsigned int proto;			/* protocol version */
+	unsigned int tstamp_type;		/* timestamp type (req. proto >= 2.0.12) */
+	unsigned char reserved[56];		/* reserved for future */
 };
 
 struct snd_pcm_channel_info {
@@ -453,11 +455,20 @@ struct snd_xfern {
 	void __user * __user *bufs;
 	snd_pcm_uframes_t frames;
 };
+struct snd_pcm_stat {
+    snd_pcm_uframes_t nFrames;
+    struct timespec start_tstamp;
+    struct timespec finish_tstamp;
+    int bValidStat;
+    int flags;
+};
 
 enum {
 	SNDRV_PCM_TSTAMP_TYPE_GETTIMEOFDAY = 0,	/* gettimeofday equivalent */
-	SNDRV_PCM_TSTAMP_TYPE_MONOTONIC,	/* posix_clock_monotonic equivalent */
-	SNDRV_PCM_TSTAMP_TYPE_LAST = SNDRV_PCM_TSTAMP_TYPE_MONOTONIC,
+	SNDRV_PCM_TSTAMP_TYPE_MONOTONIC,
+	SNDRV_PCM_TSTAMP_TYPE_MONOTONIC_RAW,/* posix_clock_monotonic equivalent */
+	SNDRV_PCM_TSTAMP_TYPE_AUDIO_WALLCLOCK,
+	SNDRV_PCM_TSTAMP_TYPE_LAST = SNDRV_PCM_TSTAMP_TYPE_AUDIO_WALLCLOCK,
 };
 
 /* channel positions */
@@ -538,6 +549,9 @@ enum {
 #define SNDRV_PCM_IOCTL_READN_FRAMES	_IOR('A', 0x53, struct snd_xfern)
 #define SNDRV_PCM_IOCTL_LINK		_IOW('A', 0x60, int)
 #define SNDRV_PCM_IOCTL_UNLINK		_IO('A', 0x61)
+#define SNDRV_PCM_IOCTL_START_AT	_IOW('A', 0x62, struct timespec)
+#define SNDRV_PCM_IOCTL_PLAY_STAT	_IOWR('A', 0x63, struct snd_pcm_stat)
+
 
 /*****************************************************************************
  *                                                                           *

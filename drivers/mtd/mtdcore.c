@@ -528,6 +528,15 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char **types,
 }
 EXPORT_SYMBOL_GPL(mtd_device_parse_register);
 
+int mtd_device_register(struct mtd_info *master,
+			const struct mtd_partition *parts,
+			int nr_parts)
+{
+	return parts ? add_mtd_partitions(master, parts, nr_parts) :
+		add_mtd_device(master);
+}
+EXPORT_SYMBOL_GPL(mtd_device_register);
+
 /**
  * mtd_device_unregister - unregister an existing MTD device.
  *

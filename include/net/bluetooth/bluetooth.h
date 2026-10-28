@@ -112,10 +112,17 @@ int bt_info(const char *fmt, ...);
 __printf(1, 2)
 int bt_err(const char *fmt, ...);
 
+#if 1
 #define BT_INFO(fmt, ...)	bt_info(fmt "\n", ##__VA_ARGS__)
 #define BT_ERR(fmt, ...)	bt_err(fmt "\n", ##__VA_ARGS__)
 #define BT_DBG(fmt, ...)	pr_debug(fmt "\n", ##__VA_ARGS__)
+#endif
+#if 0
+#define BT_INFO(fmt, ...)	printk(fmt"\n", ##__VA_ARGS__)
+#define BT_ERR(fmt, ...)	printk(fmt"\n", ##__VA_ARGS__)
+#define BT_DBG(fmt, ...)	printk(fmt"\n", ##__VA_ARGS__)
 
+#endif
 /* Connection and socket states */
 enum {
 	BT_CONNECTED = 1, /* Equal to TCP_ESTABLISHED to make net code happy */

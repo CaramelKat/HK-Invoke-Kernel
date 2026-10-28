@@ -43,7 +43,24 @@
 #include <sound/tlv.h>
 
 #include "tlv320aic32x4.h"
+#define TLV_CODEC_SLAVE
 
+#if 0
+struct aic32x4_rate_divs {
+	u32 mclk;
+	u32 rate;
+	u8 p_val;
+	u8 pll_j;
+	u16 pll_d;
+	u8 ndac;
+	u8 mdac;
+	u8 aosr;
+	u8 nadc;
+	u8 madc;
+	u8 blck_N;
+};
+#endif
+#if 1
 struct aic32x4_rate_divs {
 	u32 mclk;
 	u32 rate;
@@ -59,6 +76,7 @@ struct aic32x4_rate_divs {
 	u8 blck_N;
 };
 
+#endif
 struct aic32x4_priv {
 	u32 sysclk;
 	u8 page_no;
@@ -68,6 +86,9 @@ struct aic32x4_priv {
 	bool swapdacs;
 	int rstn_gpio;
 };
+
+int fs_rate = 0;
+
 
 /* 0dB min, 1dB steps */
 static DECLARE_TLV_DB_SCALE(tlv_step_1, 0, 100, 0);
@@ -139,15 +160,32 @@ static const struct aic32x4_rate_divs aic32x4_divs[] = {
 	/* 32k rate */
 	{AIC32X4_FREQ_12000000, 32000, 1, 7, 1680, 192, 2, 7, 64, 2, 21, 6},
 	{AIC32X4_FREQ_24000000, 32000, 2, 7, 1680, 192, 7, 2, 64, 7, 6, 6},
+#if 0
 	/* 44.1k rate */
 	{AIC32X4_FREQ_12000000, 44100, 1, 7, 5264, 128, 2, 8, 128, 2, 8, 4},
 	{AIC32X4_FREQ_24000000, 44100, 2, 7, 5264, 128, 8, 2, 64, 8, 4, 4},
 	{AIC32X4_FREQ_25000000, 44100, 2, 7, 2253, 128, 8, 2, 64, 8, 4, 4},
+#endif
 	/* 48k rate */
-	{AIC32X4_FREQ_12000000, 48000, 1, 8, 1920, 128, 2, 8, 128, 2, 8, 4},
+	//{AIC32X4_FREQ_12000000, 48000, 1, 8, 1920, 128, 2, 8, 128, 2, 8, 4},
 	{AIC32X4_FREQ_24000000, 48000, 2, 8, 1920, 128, 8, 2, 64, 8, 4, 4},
-	{AIC32X4_FREQ_25000000, 48000, 2, 7, 8643, 128, 8, 2, 64, 8, 4, 4}
+	{AIC32X4_FREQ_25000000, 48000, 2, 7, 8643, 128, 8, 2, 64, 8, 4, 4},
+#if  0 //16 bit per sample
+	{AIC32X4_FREQ_12000000, 48000,  2, 7, 8643, 32, 8, 1, 32,  8, 4, 1},
+	{AIC32X4_FREQ_12000000, 96000,  1, 8, 1920, 32, 4, 1, 32,  2, 8, 1},
+	{AIC32X4_FREQ_12000000, 192000, 1, 8, 1920, 32, 2, 1, 32,  2, 8, 1},
+#else
+         //24 bits per sample
+	{AIC32X4_FREQ_12000000, 48000,  4, 4,      0, 64, 4, 1, 64,  8, 4, 1},
+	{AIC32X4_FREQ_12000000, 96000,  4, 4,      0, 64, 2, 1, 64,  2, 8, 1},
+	{AIC32X4_FREQ_12000000, 192000, 4, 4, 	   0, 64, 1, 1, 64,  2, 8, 1},
+	
+	{AIC32X4_FREQ_12000000, 44100,  7, 12,   8625, 64, 8, 1, 64,  2, 8, 1},
+	{AIC32X4_FREQ_12000000, 88200,  7, 12,   8625, 64, 4, 1, 64,  2, 8, 1},
+	{AIC32X4_FREQ_12000000, 176400, 7, 12,   8625, 64, 2, 1, 64,  2, 8, 1},	
+#endif
 };
+
 
 static const struct snd_kcontrol_new hpl_output_mixer_controls[] = {
 	SOC_DAPM_SINGLE("L_DAC Switch", AIC32X4_HPLROUTE, 3, 1, 0),
@@ -268,7 +306,6 @@ static inline int aic32x4_change_page(struct snd_soc_codec *codec,
 	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
 	u8 data[2];
 	int ret;
-
 	data[0] = 0x00;
 	data[1] = new_page & 0xff;
 
@@ -280,6 +317,40 @@ static inline int aic32x4_change_page(struct snd_soc_codec *codec,
 		return ret;
 	}
 }
+static int aic32x4_write_hacked(struct snd_soc_codec *codec, unsigned int reg,
+				unsigned int val)
+{
+	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
+	unsigned int page = reg / 128;
+	unsigned int fixed_reg = reg % 128;
+	u8 data[2];
+	int ret;
+#if 0
+	/* A write to AIC32X4_PSEL is really a non-explicit page change */
+	if (reg == AIC32X4_PSEL)
+		return aic32x4_change_page(codec, val);
+
+	if (aic32x4->page_no != page) {
+		ret = aic32x4_change_page(codec, page);
+		if (ret != 0)
+			return ret;
+	}
+#endif
+	data[0] = reg;//fixed_reg & 0xff;
+	data[1] = val;// & 0xff;
+
+	if (codec->hw_write(codec->control_data, data, 2) == 2){
+		//printk("HDTEST HACK : page[%d] - Reg[%d] - Val[%d]\n",page,  fixed_reg, val  );
+		return 0;
+	}
+	else
+	{
+		//printk("Narain : aic32x4 error on write\n");
+		return -EIO;
+	}
+}
+
+
 
 static int aic32x4_write(struct snd_soc_codec *codec, unsigned int reg,
 				unsigned int val)
@@ -303,8 +374,10 @@ static int aic32x4_write(struct snd_soc_codec *codec, unsigned int reg,
 	data[0] = fixed_reg & 0xff;
 	data[1] = val & 0xff;
 
-	if (codec->hw_write(codec->control_data, data, 2) == 2)
+	if (codec->hw_write(codec->control_data, data, 2) == 2){
+		//printk("HDTEST : page[%d] - Reg[%d] - Val[%d]\n",page,  fixed_reg, val  );
 		return 0;
+	}
 	else
 		return -EIO;
 }
@@ -327,7 +400,7 @@ static unsigned int aic32x4_read(struct snd_soc_codec *codec, unsigned int reg)
 static inline int aic32x4_get_divs(int mclk, int rate)
 {
 	int i;
-
+	return 0;
 	for (i = 0; i < ARRAY_SIZE(aic32x4_divs); i++) {
 		if ((aic32x4_divs[i].rate == rate)
 		    && (aic32x4_divs[i].mclk == mclk)) {
@@ -340,6 +413,7 @@ static inline int aic32x4_get_divs(int mclk, int rate)
 
 static int aic32x4_add_widgets(struct snd_soc_codec *codec)
 {
+	return 0;
 	snd_soc_dapm_new_controls(&codec->dapm, aic32x4_dapm_widgets,
 				  ARRAY_SIZE(aic32x4_dapm_widgets));
 
@@ -349,12 +423,16 @@ static int aic32x4_add_widgets(struct snd_soc_codec *codec)
 	snd_soc_dapm_new_widgets(&codec->dapm);
 	return 0;
 }
+static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
+				  enum snd_soc_bias_level level);
 
 static int aic32x4_set_dai_sysclk(struct snd_soc_dai *codec_dai,
 				  int clk_id, unsigned int freq, int dir)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
 	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
+	
+	aic32x4_set_bias_level(codec,SND_SOC_BIAS_ON);
 
 	switch (freq) {
 	case AIC32X4_FREQ_12000000:
@@ -373,9 +451,11 @@ static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	u8 iface_reg_1;
 	u8 iface_reg_2;
 	u8 iface_reg_3;
+	//printk("Narain : aic32x4_set_dai_fmt\n");
 
 	iface_reg_1 = snd_soc_read(codec, AIC32X4_IFACE1);
-	iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
+	//iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2);
+	iface_reg_1 = iface_reg_1 & ~(3 << 6 | 3 << 2 | 3); //test ranjith
 	iface_reg_2 = snd_soc_read(codec, AIC32X4_IFACE2);
 	iface_reg_2 = 0;
 	iface_reg_3 = snd_soc_read(codec, AIC32X4_IFACE3);
@@ -384,6 +464,7 @@ static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
+		printk("Narain : aic32x4_set_dai_fmt codec master\n");
 		iface_reg_1 |= AIC32X4_BCLKMASTER | AIC32X4_WCLKMASTER;
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
@@ -395,6 +476,9 @@ static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
+		printk("Narain : aic32x4_set_dai_fmt I2S format\n");
+		iface_reg_1 |= (AIC32X4_I2S_MODE << AIC32X4_PLLJ_SHIFT);
+		
 		break;
 	case SND_SOC_DAIFMT_DSP_A:
 		iface_reg_1 |= (AIC32X4_DSP_MODE << AIC32X4_PLLJ_SHIFT);
@@ -417,6 +501,9 @@ static int aic32x4_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		printk(KERN_ERR "aic32x4: invalid DAI interface format\n");
 		return -EINVAL;
 	}
+	//printk("Narain : aic32x4_set_dai_fmt codec master\n");
+	// Velu : Hackeds
+	//iface_reg_1 |= AIC32X4_BCLKMASTER | AIC32X4_WCLKMASTER;
 
 	snd_soc_write(codec, AIC32X4_IFACE1, iface_reg_1);
 	snd_soc_write(codec, AIC32X4_IFACE2, iface_reg_2);
@@ -428,20 +515,27 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params,
 			     struct snd_soc_dai *dai)
 {
+
 	struct snd_soc_codec *codec = dai->codec;
 	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
 	u8 data;
 	int i;
 
+
+	fs_rate = params_rate(params);
 	i = aic32x4_get_divs(aic32x4->sysclk, params_rate(params));
 	if (i < 0) {
 		printk(KERN_ERR "aic32x4: sampling rate not supported\n");
 		return i;
 	}
 
+	//printk("Narain : aic32x4_hw_params rate : %d SysClk : %d index : %d\n",params_rate(params),aic32x4->sysclk, i);
+
+	//printk("Narain : Divider values ndac : %d mdac : %d DOSR : %d\n",aic32x4_divs[i].ndac,aic32x4_divs[i].mdac,aic32x4_divs[i].dosr);
+
 	/* Use PLL as CODEC_CLKIN and DAC_MOD_CLK as BDIV_CLKIN */
-	snd_soc_write(codec, AIC32X4_CLKMUX, AIC32X4_PLLCLKIN);
-	snd_soc_write(codec, AIC32X4_IFACE3, AIC32X4_DACMOD2BCLK);
+	snd_soc_write(codec, AIC32X4_CLKMUX, AIC32X4_PLLCLKIN);//0x0);//AIC32X4_PLLCLKIN);
+	snd_soc_write(codec, AIC32X4_IFACE3, AIC32X4_DACCLK2BCLK);
 
 	/* We will fix R value to 1 and will make P & J=K.D as varialble */
 	data = snd_soc_read(codec, AIC32X4_PLLPR);
@@ -455,6 +549,10 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 	snd_soc_write(codec, AIC32X4_PLLDLSB,
 		      (aic32x4_divs[i].pll_d & 0xff));
 
+         data = snd_soc_read(codec, AIC32X4_DACMUTE) ;
+         data &=  AIC32X4_MUTEON;
+	snd_soc_write(codec, AIC32X4_DACMUTE, data);
+	
 	/* NDAC divider value */
 	data = snd_soc_read(codec, AIC32X4_NDAC);
 	data &= ~(0x7f);
@@ -463,7 +561,7 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 	/* MDAC divider value */
 	data = snd_soc_read(codec, AIC32X4_MDAC);
 	data &= ~(0x7f);
-	snd_soc_write(codec, AIC32X4_MDAC, data | aic32x4_divs[i].mdac);
+	snd_soc_write(codec, AIC32X4_MDAC, data | aic32x4_divs[i].mdac | (1<<7));
 
 	/* DOSR MSB & LSB values */
 	snd_soc_write(codec, AIC32X4_DOSRMSB, aic32x4_divs[i].dosr >> 8);
@@ -489,7 +587,8 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 	snd_soc_write(codec, AIC32X4_BCLKN, data | aic32x4_divs[i].blck_N);
 
 	data = snd_soc_read(codec, AIC32X4_IFACE1);
-	data = data & ~(3 << 4);
+	//data &= ~(3 << 4);	 //hack  ranjith - read returns FFFF , need to check later
+	data = (3 << 2);
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
 		break;
@@ -500,11 +599,47 @@ static int aic32x4_hw_params(struct snd_pcm_substream *substream,
 		data |= (AIC32X4_WORD_LEN_24BITS << AIC32X4_DOSRMSB_SHIFT);
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
-		data |= (AIC32X4_WORD_LEN_32BITS << AIC32X4_DOSRMSB_SHIFT);
+		data |= (AIC32X4_WORD_LEN_24BITS << AIC32X4_DOSRMSB_SHIFT);
 		break;
 	}
 	snd_soc_write(codec, AIC32X4_IFACE1, data);
 
+	// Set the DAC mode to PRB_P8
+	data = snd_soc_read(codec, AIC32X4_DACSPB);
+	snd_soc_write(codec, AIC32X4_DACSPB, 0x08);	
+
+	// Diable internal crude AVdd in presence of external AVdd supply or before power up internal AVdd.
+	snd_soc_write(codec, AIC32X4_PWRCFG, AIC32X4_AVDDWEAKDISABLE);
+	
+	// Enable master analog power control
+	snd_soc_write(codec, AIC32X4_LDOCTL, 0x01);
+
+	// Set reference charging time to 40ms
+	snd_soc_write(codec, AIC32X4_REFCHRGTIME, 0x01);	
+
+	// HP soft stepping
+	snd_soc_write(codec, AIC32X4_HEADSTART, 0x25);	
+
+	// Input common mode
+	snd_soc_write(codec, AIC32X4_CMMODE, 0x00);	
+
+	// Route Left DAC to HPL and Right DAC to HPR
+	snd_soc_write(codec, AIC32X4_HPLROUTE, 0x08);	
+	snd_soc_write(codec, AIC32X4_HPRROUTE, 0x08);	
+
+	// Set the DAC PTM mode to PTM_P3/4
+	snd_soc_write(codec, AIC32X4_DACPTML, 0x00);	
+	snd_soc_write(codec, AIC32X4_DACPTMR, 0x00);	
+
+	// Set the HPL and HPR gain to 0db
+	snd_soc_write(codec, AIC32X4_HPLGAIN, 0x00);	
+	snd_soc_write(codec, AIC32X4_HPRGAIN, 0x00);	
+	
+	// Power up HPL and HPR drivers
+	snd_soc_write(codec, AIC32X4_OUTPWRCTL, 0x30);	
+         mdelay(1000 * 3);
+	//Power up DAC channel
+	snd_soc_write(codec, AIC32X4_DACSETUP, 0xd6);	
 	return 0;
 }
 
@@ -513,11 +648,57 @@ static int aic32x4_mute(struct snd_soc_dai *dai, int mute)
 	struct snd_soc_codec *codec = dai->codec;
 	u8 dac_reg;
 
-	dac_reg = snd_soc_read(codec, AIC32X4_DACMUTE) & ~AIC32X4_MUTEON;
+	dac_reg = 0; // snd_soc_read(codec, AIC32X4_DACMUTE) & ~AIC32X4_MUTEON;   //HD_HACK
 	if (mute)
 		snd_soc_write(codec, AIC32X4_DACMUTE, dac_reg | AIC32X4_MUTEON);
 	else
 		snd_soc_write(codec, AIC32X4_DACMUTE, dac_reg);
+
+
+#if 0
+	
+	aic32x4_write_hacked(codec,	0x00	,	0x00	);
+	aic32x4_write_hacked(codec,	0x01	,	0x01	);
+
+	// 96KHz
+	//aic32x4_write_hacked(codec,	0x0b	,	0x84	);
+	// 192KHz
+	aic32x4_write_hacked(codec,	0x0b	,	0x82	);
+	// 48KHz
+//   aic32x4_write_hacked(codec, 	0x0b	,	0x88	);
+
+	aic32x4_write_hacked(codec,	0x0c	,	0x81	);
+	aic32x4_write_hacked(codec,	0x0d	,	0x00	);
+	// 32-bit(2-channel)
+	aic32x4_write_hacked(codec, 0x0e	,	0x20	);
+
+	aic32x4_write_hacked(codec,	0x1e	,	0x81	);
+
+	aic32x4_write_hacked(codec,	0x1b	,	0x0c	);
+
+
+	aic32x4_write_hacked(codec,	0x3c	,	0x08	);
+					
+	aic32x4_write_hacked(codec,	0x00	,	0x01	);
+	aic32x4_write_hacked(codec,	0x01	,	0x08	);
+	aic32x4_write_hacked(codec,	0x02	,	0x01	);
+	aic32x4_write_hacked(codec,	0x7b	,	0x01	);
+	aic32x4_write_hacked(codec,	0x14	,	0x25	);
+	aic32x4_write_hacked(codec,	0x0a	,	0x00	);
+	aic32x4_write_hacked(codec,	0x0c	,	0x08	);
+	aic32x4_write_hacked(codec,	0x0d	,	0x08	);
+	aic32x4_write_hacked(codec,	0x03	,	0x00	);
+	aic32x4_write_hacked(codec,	0x04	,	0x00	);
+	aic32x4_write_hacked(codec,	0x10	,	0x00	);
+	aic32x4_write_hacked(codec,	0x11	,	0x00	);
+	aic32x4_write_hacked(codec,	0x09	,	0x30	);
+	ndelay(1000000000 * 3);
+	aic32x4_write_hacked(codec,	0x00	,	0x00	);
+	aic32x4_write_hacked(codec,	0x3f	,	0xd6	);
+	aic32x4_write_hacked(codec,	0x40	,	0x00	);
+	#endif
+	//printk("Narain : aic32x4 configured\n");
+		
 	return 0;
 }
 
@@ -526,9 +707,12 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 {
 	switch (level) {
 	case SND_SOC_BIAS_ON:
-		/* Switch on PLL */
-		snd_soc_update_bits(codec, AIC32X4_PLLPR,
-				    AIC32X4_PLLEN, AIC32X4_PLLEN);
+	//	if ()
+		{
+			/* Switch on PLL */
+			snd_soc_update_bits(codec, AIC32X4_PLLPR,
+					    AIC32X4_PLLEN, AIC32X4_PLLEN);//0);//AIC32X4_PLLEN);
+		}
 
 		/* Switch on NDAC Divider */
 		snd_soc_update_bits(codec, AIC32X4_NDAC,
@@ -537,7 +721,7 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 		/* Switch on MDAC Divider */
 		snd_soc_update_bits(codec, AIC32X4_MDAC,
 				    AIC32X4_MDACEN, AIC32X4_MDACEN);
-
+#if 0
 		/* Switch on NADC Divider */
 		snd_soc_update_bits(codec, AIC32X4_NADC,
 				    AIC32X4_NADCEN, AIC32X4_NADCEN);
@@ -545,25 +729,28 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 		/* Switch on MADC Divider */
 		snd_soc_update_bits(codec, AIC32X4_MADC,
 				    AIC32X4_MADCEN, AIC32X4_MADCEN);
-
+#endif
 		/* Switch on BCLK_N Divider */
 		snd_soc_update_bits(codec, AIC32X4_BCLKN,
 				    AIC32X4_BCLKEN, AIC32X4_BCLKEN);
 		break;
+
 	case SND_SOC_BIAS_PREPARE:
 		break;
 	case SND_SOC_BIAS_STANDBY:
+		break;
 		/* Switch off PLL */
 		snd_soc_update_bits(codec, AIC32X4_PLLPR,
 				    AIC32X4_PLLEN, 0);
 
 		/* Switch off NDAC Divider */
 		snd_soc_update_bits(codec, AIC32X4_NDAC,
-				    AIC32X4_NDACEN, 0);
+				    AIC32X4_NDACEN, AIC32X4_NDACEN);//0);
 
 		/* Switch off MDAC Divider */
 		snd_soc_update_bits(codec, AIC32X4_MDAC,
-				    AIC32X4_MDACEN, 0);
+				    AIC32X4_MDACEN, AIC32X4_MDACEN);//0);
+#if 0
 
 		/* Switch off NADC Divider */
 		snd_soc_update_bits(codec, AIC32X4_NADC,
@@ -572,11 +759,13 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 		/* Switch off MADC Divider */
 		snd_soc_update_bits(codec, AIC32X4_MADC,
 				    AIC32X4_MADCEN, 0);
+#endif
 
 		/* Switch off BCLK_N Divider */
 		snd_soc_update_bits(codec, AIC32X4_BCLKN,
-				    AIC32X4_BCLKEN, 0);
+				    AIC32X4_BCLKEN, AIC32X4_BCLKEN);//0);
 		break;
+
 	case SND_SOC_BIAS_OFF:
 		break;
 	}
@@ -584,16 +773,46 @@ static int aic32x4_set_bias_level(struct snd_soc_codec *codec,
 	return 0;
 }
 
-#define AIC32X4_RATES	SNDRV_PCM_RATE_8000_48000
-#define AIC32X4_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE \
-			 | SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S32_LE)
+// For Codec Slave Callbacks
+static int aic32x4_hw_params_slave(struct snd_pcm_substream *substream,
+			     struct snd_pcm_hw_params *params,
+			     struct snd_soc_dai *dai)
+{
+	return 0;
+}
+static int aic32x4_mute_slave(struct snd_soc_dai *dai, int mute)
+{
+	return 0;
+}
+static int aic32x4_set_dai_fmt_slave(struct snd_soc_dai *codec_dai, unsigned int fmt)
+{
+	return 0;
+}
+static int aic32x4_set_dai_sysclk_slave(struct snd_soc_dai *codec_dai,
+				  int clk_id, unsigned int freq, int dir)
+{
+	return 0;
+}
 
+#define AIC32X4_RATES	SNDRV_PCM_RATE_8000_192000
+#define AIC32X4_FORMATS	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE \
+			 | SNDRV_PCM_FMTBIT_S24_3LE | SNDRV_PCM_FMTBIT_S32_LE | SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
+
+#ifdef TLV_CODEC_SLAVE
+static const struct snd_soc_dai_ops aic32x4_ops = {
+	.hw_params = aic32x4_hw_params_slave,
+	.digital_mute = aic32x4_mute_slave,
+	.set_fmt = aic32x4_set_dai_fmt_slave,
+	.set_sysclk = aic32x4_set_dai_sysclk_slave,
+};
+#else
 static const struct snd_soc_dai_ops aic32x4_ops = {
 	.hw_params = aic32x4_hw_params,
 	.digital_mute = aic32x4_mute,
 	.set_fmt = aic32x4_set_dai_fmt,
 	.set_sysclk = aic32x4_set_dai_sysclk,
 };
+#endif
 
 static struct snd_soc_dai_driver aic32x4_dai = {
 	.name = "tlv320aic32x4-hifi",
@@ -630,6 +849,7 @@ static int aic32x4_probe(struct snd_soc_codec *codec)
 	struct aic32x4_priv *aic32x4 = snd_soc_codec_get_drvdata(codec);
 	u32 tmp_reg;
 	int ret;
+	printk("Narain : aic32x4_probe\n");
 
 	codec->hw_write = (hw_write_t) i2c_master_send;
 	codec->control_data = aic32x4->control_data;
@@ -683,6 +903,7 @@ static int aic32x4_probe(struct snd_soc_codec *codec)
 	}
 
 	aic32x4_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	aic32x4_set_bias_level(codec, SND_SOC_BIAS_ON);
 	snd_soc_add_codec_controls(codec, aic32x4_snd_controls,
 			     ARRAY_SIZE(aic32x4_snd_controls));
 	aic32x4_add_widgets(codec);
@@ -696,7 +917,69 @@ static int aic32x4_probe(struct snd_soc_codec *codec)
 	snd_soc_write(codec, AIC32X4_ADCSETUP, tmp_reg |
 				AIC32X4_LADC_EN | AIC32X4_RADC_EN);
 	snd_soc_write(codec, AIC32X4_ADCSETUP, tmp_reg);
+	
 
+#ifdef TLV_CODEC_SLAVE
+	
+	aic32x4_write_hacked(codec,	0x00	,	0x00	);
+	aic32x4_write_hacked(codec,	0x01	,	0x01	);
+ 
+	//aic32x4_write_hacked(codec, 0x0b	,	0x00	);
+
+
+	// 96KHz
+	aic32x4_write_hacked(codec,	0x0b	,	0x84	);
+	// 192KHz
+	//aic32x4_write_hacked(codec,	0x0b	,	0x82	);
+	// 48KHz
+	//   aic32x4_write_hacked(codec, 	0x0b	,	0x88	);
+
+	aic32x4_write_hacked(codec,	0x0c	,	0x81	);
+	
+	//aic32x4_write_hacked(codec,	0x0c	,	0x00	);
+	
+	aic32x4_write_hacked(codec,	0x0d	,	0x00	);
+	// 32-bit(2-channel)
+	aic32x4_write_hacked(codec, 0x0e	,	0x20	);
+
+	// bit clock divider
+	aic32x4_write_hacked(codec,	0x1e	,	0x81	);
+
+	// bit clock divider
+	//aic32x4_write_hacked(codec,	0x1e	,	0x00	);
+	
+	//bclk-wclk = output to codec
+	//aic32x4_write_hacked(codec,	0x1b	,	0x0c	);
+	//bclk-wclk = input to codec
+	//aic32x4_write_hacked(codec,	0x1b	,	0x00	);
+	//32 bit
+	//aic32x4_write_hacked(codec,	0x1b	,	0x30	);
+		
+	//24 bit
+	aic32x4_write_hacked(codec, 0x1b	,	0x20	);
+
+	aic32x4_write_hacked(codec, 0x04	,	0x10	);
+
+	aic32x4_write_hacked(codec,	0x3c	,	0x08	);
+					
+	aic32x4_write_hacked(codec,	0x00	,	0x01	);
+	aic32x4_write_hacked(codec,	0x01	,	0x08	);
+	aic32x4_write_hacked(codec,	0x02	,	0x01	);
+	aic32x4_write_hacked(codec,	0x7b	,	0x01	);
+	aic32x4_write_hacked(codec,	0x14	,	0x25	);
+	aic32x4_write_hacked(codec,	0x0a	,	0x00	);
+	aic32x4_write_hacked(codec,	0x0c	,	0x08	);
+	aic32x4_write_hacked(codec,	0x0d	,	0x08	);
+	aic32x4_write_hacked(codec,	0x03	,	0x00	);
+	aic32x4_write_hacked(codec,	0x04	,	0x00	);
+	aic32x4_write_hacked(codec,	0x10	,	0x00	);
+	aic32x4_write_hacked(codec,	0x11	,	0x00	);
+	aic32x4_write_hacked(codec,	0x09	,	0x30	);
+	//mdelay(1000 * 3);
+	aic32x4_write_hacked(codec,	0x00	,	0x00	);
+	aic32x4_write_hacked(codec,	0x3f	,	0xd6	);
+	aic32x4_write_hacked(codec,	0x40	,	0x00	);
+#endif
 	return 0;
 }
 
@@ -713,7 +996,7 @@ static struct snd_soc_codec_driver soc_codec_dev_aic32x4 = {
 	.remove = aic32x4_remove,
 	.suspend = aic32x4_suspend,
 	.resume = aic32x4_resume,
-	.set_bias_level = aic32x4_set_bias_level,
+	//.set_bias_level = aic32x4_set_bias_level,
 };
 
 static int aic32x4_i2c_probe(struct i2c_client *i2c,
@@ -722,6 +1005,7 @@ static int aic32x4_i2c_probe(struct i2c_client *i2c,
 	struct aic32x4_pdata *pdata = i2c->dev.platform_data;
 	struct aic32x4_priv *aic32x4;
 	int ret;
+	printk("Narain : aic32x4_i2c_probe\n");
 
 	aic32x4 = devm_kzalloc(&i2c->dev, sizeof(struct aic32x4_priv),
 			       GFP_KERNEL);

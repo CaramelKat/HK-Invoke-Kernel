@@ -39,6 +39,7 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/log2.h>
+#include <linux/configfs.h>
 
 /*
  * USB function drivers should return USB_GADGET_DELAYED_STATUS if they
@@ -136,6 +137,8 @@ struct usb_function {
 					struct usb_function *);
 	void			(*unbind)(struct usb_configuration *,
 					struct usb_function *);
+	void			(*free_func)(struct usb_function *f);
+	struct module		*mod;
 
 	/* runtime state management */
 	int			(*set_alt)(struct usb_function *,
@@ -156,6 +159,7 @@ struct usb_function {
 	/* internals */
 	struct list_head		list;
 	DECLARE_BITMAP(endpoints, 32);
+	const struct usb_function_instance *fi;
 };
 
 int usb_add_function(struct usb_configuration *, struct usb_function *);
@@ -430,6 +434,56 @@ static inline u16 get_default_bcdDevice(void)
 	bcdDevice |= bin2bcd((LINUX_VERSION_CODE >> 8 & 0xff));
 	return bcdDevice;
 }
+
+struct usb_function_driver {
+	const char *name;
+	struct module *mod;
+	struct list_head list;
+	struct usb_function_instance *(*alloc_inst)(void);
+	struct usb_function *(*alloc_func)(struct usb_function_instance *inst);
+};
+
+struct usb_function_instance {
+	struct config_group group;
+	struct list_head cfs_list;
+	struct usb_function_driver *fd;
+	void (*free_func_inst)(struct usb_function_instance *inst);
+};
+
+void usb_function_unregister(struct usb_function_driver *f);
+int usb_function_register(struct usb_function_driver *newf);
+void usb_put_function_instance(struct usb_function_instance *fi);
+void usb_put_function(struct usb_function *f);
+struct usb_function_instance *usb_get_function_instance(const char *name);
+struct usb_function *usb_get_function(struct usb_function_instance *fi);
+
+struct usb_configuration *usb_get_config(struct usb_composite_dev *cdev,
+		int val);
+int usb_add_config_only(struct usb_composite_dev *cdev,
+		struct usb_configuration *config);
+void usb_remove_function(struct usb_configuration *c, struct usb_function *f);
+
+#define DECLARE_USB_FUNCTION(_name, _inst_alloc, _func_alloc)		\
+	static struct usb_function_driver _name ## usb_func = {		\
+		.name = __stringify(_name),				\
+		.mod  = THIS_MODULE,					\
+		.alloc_inst = _inst_alloc,				\
+		.alloc_func = _func_alloc,				\
+	};								\
+	MODULE_ALIAS("usbfunc:"__stringify(_name));
+
+#define DECLARE_USB_FUNCTION_INIT(_name, _inst_alloc, _func_alloc)	\
+	DECLARE_USB_FUNCTION(_name, _inst_alloc, _func_alloc)		\
+	static int __init _name ## mod_init(void)			\
+	{								\
+		return usb_function_register(&_name ## usb_func);	\
+	}								\
+	static void __exit _name ## mod_exit(void)			\
+	{								\
+		usb_function_unregister(&_name ## usb_func);		\
+	}								\
+	module_init(_name ## mod_init);					\
+	module_exit(_name ## mod_exit)
 
 /* messaging utils */
 #define DBG(d, fmt, args...) \

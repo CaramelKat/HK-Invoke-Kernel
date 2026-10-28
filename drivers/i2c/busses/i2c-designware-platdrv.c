@@ -57,6 +57,7 @@ static int dw_i2c_probe(struct platform_device *pdev)
 	struct resource *mem, *ioarea;
 	int irq, r;
 
+	printk("Libre : Designware I2C Probe Called\n");
 	/* NOTE: driver uses the static register mapping */
 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!mem) {
@@ -106,7 +107,7 @@ static int dw_i2c_probe(struct platform_device *pdev)
 		I2C_FUNC_SMBUS_WORD_DATA |
 		I2C_FUNC_SMBUS_I2C_BLOCK;
 	dev->master_cfg =  DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE |
-		DW_IC_CON_RESTART_EN | DW_IC_CON_SPEED_FAST;
+		DW_IC_CON_RESTART_EN | DW_IC_CON_SPEED_STD;
 
 	dev->base = ioremap(mem->start, resource_size(mem));
 	if (dev->base == NULL) {
@@ -228,6 +229,7 @@ static SIMPLE_DEV_PM_OPS(dw_i2c_dev_pm_ops, dw_i2c_suspend, dw_i2c_resume);
 MODULE_ALIAS("platform:i2c_designware");
 
 static struct platform_driver dw_i2c_driver = {
+	.probe		= dw_i2c_probe,
 	.remove		= dw_i2c_remove,
 	.driver		= {
 		.name	= "i2c_designware",
@@ -239,9 +241,14 @@ static struct platform_driver dw_i2c_driver = {
 
 static int __init dw_i2c_init_driver(void)
 {
-	return platform_driver_probe(&dw_i2c_driver, dw_i2c_probe);
+	
+	printk("Libre : i2c Designware module init called\n");
+	return platform_driver_register(&dw_i2c_driver);
+	//return platform_driver_probe(&dw_i2c_driver, dw_i2c_probe);
+	
+	
 }
-subsys_initcall(dw_i2c_init_driver);
+module_init(dw_i2c_init_driver);
 
 static void __exit dw_i2c_exit_driver(void)
 {

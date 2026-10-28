@@ -95,8 +95,9 @@ static void __cpuinit arch_timer_setup(struct clock_event_device *clk)
 {
 	/* Let's make sure the timer is off before doing anything else */
 	arch_timer_stop();
-
-	clk->features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_C3STOP;
+	//clk->features = CLOCK_EVT_FEAT_ONESHOT | CLOCK_EVT_FEAT_C3STOP;
+	/* To Enable High Resolution Timer in SMP Machine */
+	clk->features = CLOCK_EVT_FEAT_ONESHOT;	 
 	clk->name = "arch_sys_timer";
 	clk->rating = 400;
 	clk->set_mode = arch_timer_set_mode;

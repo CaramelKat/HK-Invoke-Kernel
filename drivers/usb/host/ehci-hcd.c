@@ -302,6 +302,7 @@ static void ehci_quiesce (struct ehci_hcd *ehci)
 
 static void end_unlink_async(struct ehci_hcd *ehci);
 static void unlink_empty_async(struct ehci_hcd *ehci);
+static void unlink_empty_async_suspended(struct ehci_hcd *ehci);
 static void ehci_work(struct ehci_hcd *ehci);
 static void start_unlink_intr(struct ehci_hcd *ehci, struct ehci_qh *qh);
 static void end_unlink_intr(struct ehci_hcd *ehci, struct ehci_qh *qh);
@@ -669,9 +670,6 @@ int ehci_setup(struct usb_hcd *hcd)
 	if (retval)
 		return retval;
 
-	if (ehci_is_TDI(ehci))
-		tdi_reset(ehci);
-
 	ehci_reset(ehci);
 
 	return 0;
@@ -748,11 +746,9 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 		/* guard against (alleged) silicon errata */
 		if (cmd & CMD_IAAD)
 			ehci_dbg(ehci, "IAA with IAAD still set?\n");
-		if (ehci->async_iaa) {
+		if (ehci->async_iaa)
 			COUNT(ehci->stats.iaa);
-			end_unlink_async(ehci);
-		} else
-			ehci_dbg(ehci, "IAA with nothing unlinked?\n");
+		end_unlink_async(ehci);
 	}
 
 	/* remote wakeup [4.3.1] */
@@ -1340,6 +1336,11 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_MIPS_SEAD3
 #include "ehci-sead3.c"
 #define	PLATFORM_DRIVER		ehci_hcd_sead3_driver
+#endif
+
+#ifdef CONFIG_USB_EHCI_BERLIN
+#include "ehci-berlin.c"
+#define PLATFORM_DRIVER		berlin_ehci_driver
 #endif
 
 #if !IS_ENABLED(CONFIG_USB_EHCI_PCI) && \

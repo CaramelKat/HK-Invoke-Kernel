@@ -1,0 +1,530 @@
+/*
+ * MARVELL BERLIN2CDP SoC device tree source
+ *
+ * Author:	Jisheng Zhang <jszhang@marvell.com>
+ * Copyright (c) 2013 Marvell International Ltd.
+ *		http://www.marvell.com
+ *
+ * MARVELL BERLIN2CDP SoC device nodes are listed in this file.
+ * BERLIN2CDP based board files can include this file and provide
+ * values for board specfic bindings.
+ *
+ * Note: This file does not include device nodes for all the controllers in
+ * BERLIN2CDP SoC. As device tree coverage for BERLIN2CDP increases,
+ * additional nodes can be added to this file.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/include/ "skeleton.dtsi"
+
+/ {
+	aliases {
+			spi1 = &spi1;
+		};
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <0>;
+			operating-points = <
+				/* kHz    uV */
+				1000000	1200000
+				800000	1200000
+				600000	1200000
+			>;
+			clock-latency = <100000>;
+			clocks = <&cpuclk>;
+		};
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a7";
+			reg = <1>;
+		};
+	};
+
+	chosen {
+		bootargs = "console=ttyS0,115200 root=/dev/nfs nfsroot=10.37.116.100:/home/jszhang/_install,vers=3 ip=::::bg2-cdp::dhcp macaddr=00:78:73:AB:38:CF mtdparts=mv_nand:1M(block0)ro,8M(bootloader),7M(fts)ro,16M(kernel),60M(recovery),80M(backupsys)ro,16M(factory_store),400M(rootfs),32M(localstorage),300M(cache),1024M(userdata)";
+	};
+
+	clocks {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		osc: osc {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <25000000>;
+		};
+
+		cpupll: cpupll {
+			compatible = "marvell,berlin2cdp-pll";
+			clocks = <&osc>;
+			#clock-cells = <0>;
+			reg = <0xF7920070 0x14>, <0xF7EA0614 4>;
+			bypass-shift = /bits/ 8 <2>;
+		};
+
+		syspll: syspll {
+			compatible = "marvell,berlin2cdp-pll";
+			clocks = <&osc>;
+			#clock-cells = <0>;
+			reg = <0xF7EA0200 0x14>, <0xF7EA0614 4>;
+			bypass-shift = /bits/ 8 <0>;
+		};
+
+		cpuclk: cpuclk {
+			compatible = "fixed-factor-clock";
+			clocks = <&cpupll>;
+			#clock-cells = <0>;
+			clock-div = <1>;
+			clock-mult = <1>;
+			set-rate-parent;
+		};
+
+		cfgclk: cfgclk {
+			compatible = "marvell,berlin-clk";
+			clocks = <&syspll>;
+			#clock-cells = <0>;
+			reg = <0xF7EA0620 4>;
+		};
+
+		perifclk: perifclk {
+			compatible = "marvell,berlin-clk";
+			clocks = <&syspll>;
+			#clock-cells = <0>;
+			reg = <0xF7EA0644 4>;
+		};
+
+		nfceccclk: nfceccclk {
+			compatible = "marvell,berlin-clk";
+			clocks = <&syspll>;
+			#clock-cells = <0>;
+			reg = <0xF7EA0658 4>;
+		};
+
+		sd0clk: sd0clk {
+			compatible = "marvell,berlin-clk";
+			clocks = <&syspll>;
+			#clock-cells = <0>;
+			reg = <0xF7EA065C 4>;
+		};
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "simple-bus";
+		interrupt-parent = <&gic>;
+		ranges;
+
+		sw_generic1 {
+			compatible = "marvell,berlin-sw_generic1";
+			reg = <0xF7EA001C 4>;
+		};
+
+		timer {
+			compatible = "arm,armv7-timer";
+			interrupts = <1 13 0xf08>,
+				     <1 14 0xf08>,
+				     <1 11 0xf08>,
+				     <1 10 0xf08>;
+			clock-frequency = <25000000>;
+		};
+
+		gic:interrupt-controller@F7901000 {
+			compatible = "arm,cortex-a15-gic";
+			#interrupt-cells = <3>;
+			interrupt-controller;
+			reg = <0xF7901000 0x1000>, <0xF7902000 0x1000>;
+		};
+
+		pmu {
+			compatible = "arm,cortex-a7-pmu";
+			interrupts = <0 23 4  0 24 4>;
+		};
+
+		usbphy0: usbphy@F7B74000 {
+			compatible = "marvell,berlin-usbphy";
+			reg = <0xF7B74000 128>;
+			phy-mode = <2>;
+		};
+
+		usb@F7ED0000 {
+			compatible = "mrvl,berlin-ehci";
+			reg = <0xF7ED0000 0x10000>;
+			interrupts = <0 11 4>;
+			phy-base = <0xF7B74000>;
+		};
+
+		udc@F7ED0000 {
+			compatible = "marvell,berlin-udc";
+			reg = <0xF7ED0100 0x1ff>;
+			interrupts = <0 11 0x4>;
+			usb-phy = <&usbphy0>;
+			status = "okay";
+		};
+
+		sdhci@F7AB0800 {
+			compatible = "mrvl,berlin-sdhci";
+			reg = <0xF7AB0800 0x200>;
+			interrupts = <0 15 4>;
+			clocks = <&sd0clk>;
+			mrvl,no-hispd;
+			mrvl,card-wired;
+			mrvl,host-off-card-on;
+		};
+
+		sdhci@F7AB0000 {
+			compatible = "mrvl,berlin-sdhci";
+			reg = <0xF7AB0000 0x200>;
+			interrupts = <0 13 4>;
+			clocks = <&nfceccclk>;
+			mrvl,card-wired;
+			mrvl,8bit-data;
+		};
+
+		apb_ictl: interrupt-controller@F7E83800 {
+			compatible = "snps,dw-apb-ictl";
+			interrupts = <0 8 4>;
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			reg = <0xF7E83800 0x30>;
+			ictl-nr-irqs = <32>;
+		};
+
+		sm_ictl: interrupt-controller@F7FCE000 {
+			compatible = "snps,dw-apb-ictl";
+			interrupts = <0 17 4>;
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			reg = <0xF7FCE000 0x30>;
+			ictl-nr-irqs = <32>;
+		};
+
+		timer0: apbtimer@F7E82C00 {
+			compatible = "berlin,apb-timer";
+			interrupt-parent = <&apb_ictl>;
+			interrupts = <8>;
+			clock-freq = <100000000>;
+			reg = <0xF7E82C00 0x14>;
+		};
+
+		timer1: apbtimer@F7E82C8C {
+			compatible = "berlin,apb-timer";
+			clock-freq = <100000000>;
+			reg = <0xF7E82C8C 0x14>;
+		};
+
+		uart0: uart@F7FC9000 {
+			compatible = "snps,dw-apb-uart";
+			reg = <0xF7FC9000 0x100>;
+			interrupt-parent = <&sm_ictl>;
+			interrupts = <8>;
+			clock-frequency = <25000000>;
+			reg-shift = <2>;
+		};
+
+		uart1: uart@F7FCA000 {
+			compatible = "snps,dw-apb-uart";
+			reg = <0xF7FCA000 0x100>;
+			interrupt-parent = <&sm_ictl>;
+			interrupts = <9>;
+			clock-frequency = <25000000>;
+			reg-shift = <2>;
+		};
+
+		gpio@F7E80400 {
+			compatible = "berlin,apb-gpio";
+			interrupt-parent = <&apb_ictl>;
+			interrupts = <0 1 2 3>;
+		};
+
+		gpio@F7FCC000 {
+			compatible = "berlin,sm-gpio";
+			interrupt-parent = <&sm_ictl>;
+			interrupts = <11 4>;
+		};
+
+		gpio0: apbgpio@F7E80400 {
+			compatible = "snps,dw-apb-gpio";
+                        dev_name = "gpio_soc_0";
+			reg = <0xF7E80400 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			banka: gpio-controller@0 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				base-gpio = <0>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&apb_ictl>;
+				interrupts = <0>;
+			};
+		};
+
+                gpio1: apbgpio@F7E80800 {
+                        compatible = "snps,dw-apb-gpio";
+                        dev_name = "gpio_soc_1";
+                        reg = <0xF7E80800 0x400>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+			bankb: gpio-controller@1 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				base-gpio = <32>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&apb_ictl>;
+				interrupts = <1>;
+			};
+		};
+
+                gpio2: apbgpio@F7E80C00 {
+                        compatible = "snps,dw-apb-gpio";
+                        dev_name = "gpio_soc_2";
+                        reg = <0xF7E80C00 0x400>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+			bankc: gpio-controller@2 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				base-gpio = <64>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&apb_ictl>;
+				interrupts = <2>;
+			};
+		};
+
+                gpio3: apbgpio@F7E81000 {
+                        compatible = "snps,dw-apb-gpio";
+                        dev_name = "gpio_soc_3";
+                        reg = <0xF7E81000 0x400>;
+                        #address-cells = <1>;
+                        #size-cells = <0>;
+
+			bankd: gpio-controller@3 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				base-gpio = <96>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&apb_ictl>;
+				interrupts = <3>;
+			};
+		};
+
+		gpio4: apbgpio@F7FCC000 {
+			compatible = "snps,dw-apb-gpio";
+                        dev_name = "gpio_sm_0";
+			reg = <0xF7FCC000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			banke: gpio-controller@4 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&sm_ictl>;
+				interrupts = <11>;
+			};
+		};
+
+		gpio5: apbgpio@F7FC5000 {
+			compatible = "snps,dw-apb-gpio";
+			reg = <0xF7FC5000 0x400>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			bankf: gpio-controller@5 {
+				compatible = "snps,dw-apb-gpio-bank";
+				gpio-controller;
+				reg = <0>;
+				#gpio-cells = <2>;
+				nr-gpio = <32>;
+				interrupt-controller;
+				#interrupt-cells = <2>;
+				interrupt-parent = <&sm_ictl>;
+				interrupts = <4>;
+			};
+		};
+
+		i2c0: i2c@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			compatible = "snps,designware-i2c";
+			interrupt-parent = <&apb_ictl>;
+			clocks = <&cfgclk>;
+			reg = <0xF7E81400 0x100>;
+			interrupts = <4>;
+
+
+			wm8904: wm8904@1A{
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "wm8904";
+				reg = <0x1A>;
+
+			};
+			crypto: crypto@64 {
+					compatible = "crypto";
+					reg = <0x64>;
+				};
+		};
+
+
+	i2s:i2s@0 {
+			compatible = "mtk,mt7628-i2s", "mtk,mt7621-i2s","ralink,mt7620a-i2s";
+			reg = <0xF7E81500 0x100>;
+
+			dmas = <&gdma 4>,
+				<&gdma 5>;
+			dma-names = "tx", "rx";
+
+			
+		};
+	gdma: gdma@0 {
+			compatible = "ralink,mt7620a-gdma", "ralink,rt2880-gdma";
+			reg = <0xF7E81600 0x800>;
+
+			#dma-cells = <1>;
+			#dma-channels = <16>;
+			#dma-requests = <16>;
+
+		};
+
+	sound {
+		compatible = "marvell,wm8904-audio";
+		pinctrl-names = "default";
+/*
+		pinctrl-0 = <&pinctrl_pck0_as_audio_mck>;
+*/
+
+		atmel,model = "wm8904 @ SAMA5D3EK";
+		atmel,audio-routing =
+			"Headphone Jack", "HPOUTL",
+			"Headphone Jack", "HPOUTR",
+			"IN2L", "Line In Jack",
+			"IN2R", "Line In Jack",
+			"IN1L", "Mic";
+
+		marvell,ssc-controller = <&i2s>;
+
+		marvell,audio-codec = <&wm8904>;
+
+	};
+		spi1: spi@F7E81C00 {
+			compatible = "snps,designware-spi";
+			reg = <0xF7E81C00 0x100>;
+			num-cs = <4>;
+			clocks = <&cfgclk>;
+			interrupt-parent = <&apb_ictl>;
+			interrupts = <7>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+		};
+		watchdog@0xF7FC2000 {
+			compatible = "snps,dw-wdt";
+			reg = <0xF7FC2000 0x100>;
+			interrupt-parent = <&sm_ictl>;
+			interrupts = <1>;
+			clocks = <&osc>;
+			snps,rpl = <0x2>;
+		};
+
+		opp {
+			compatible = "marvell,berlin2cdp-opp";
+			reg = <0x1010020 4>;
+		};
+
+		pe{
+			compatible = "mrvl,berlin-pe";
+			/* interrupts = <0 19 4  0 0 4  0 1 4  0 25 4  0 2 4>; */
+                        interrupts = <0 35 4  0 33 4  0 34 4  0 25 4  0 29 4>;
+			cec{
+				compatible = "mrvl,berlin-cec";
+				interrupt-parent = <&sm_ictl>;
+				interrupts = <16>;
+			};
+		};
+
+		amp{
+			compatible = "mrvl,berlin-amp";
+			interrupts = <0 35 4  0 33 4  0 34 4  0 25 4  0 29 4>;
+			cec{
+				compatible = "mrvl,berlin-cec";
+				interrupt-parent = <&sm_ictl>;
+				interrupts = <16>;
+			};
+
+			chip_version{
+				compatible = "mrvl,berlin-chip-ext";
+				revision = <0xA0>;
+			};
+
+			avio_channel{
+				compatible = "mrvl,berlin-avio";
+				num = <0x4>;
+			};
+
+			irq_affinity{
+				compatible = "mrvl,berlin-irq-affinity";
+				affinity = <2 2>; /* vpp, aout */
+			};
+		};
+
+
+		gpu3d{
+			compatible = "marvell,berlin-gpu3d";
+			reg = <0xF7BC0000 0x800>;
+			interrupts = <0 20 4>;
+			marvell,nonsecure-mem-base = <0>;
+			marvell,nonsecure-mem-size = <0x200>;
+			marvell,phy-mem-size = <0x80000000>;
+		};
+
+		nfc@F7F00000 {
+			compatible = "mrvl,berlin-nfc";
+			reg = <0xF7F00000 0x10000>, <0xF7D70000 0x10000>;
+			interrupts = <0 5 4>;
+			mrvl,nfc-dma;
+			mrvl,nfc-naked-cmd;
+			mrvl,nfc-arbi;
+		};
+
+		tsen@F7FCD000 {
+			compatible = "mrvl,berlin2cdp-tsen-adc33";
+			reg = <0xF7FCD014 4>,
+			      <0xF7FCD01C 4>,
+			      <0xF7FCD070 4>,
+			      <0xF7FCD024 4>,
+			      <0xF7FCD028 4>;
+		};
+	};
+};

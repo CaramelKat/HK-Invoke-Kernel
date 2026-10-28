@@ -377,6 +377,11 @@ int snd_soc_register_codec(struct device *dev,
 		const struct snd_soc_codec_driver *codec_drv,
 		struct snd_soc_dai_driver *dai_drv, int num_dai);
 void snd_soc_unregister_codec(struct device *dev);
+int snd_soc_register_component(struct device *dev,
+			 const struct snd_soc_component_driver *cmpnt_drv,
+			 struct snd_soc_dai_driver *dai_drv, int num_dai);
+void snd_soc_unregister_component(struct device *dev);
+
 int snd_soc_codec_volatile_register(struct snd_soc_codec *codec,
 				    unsigned int reg);
 int snd_soc_codec_readable_register(struct snd_soc_codec *codec,
@@ -630,12 +635,18 @@ struct snd_soc_pcm_stream {
 
 /* SoC audio ops */
 struct snd_soc_ops {
+	int (*open)(struct snd_pcm_substream *substream);
+	int (*close)(struct snd_pcm_substream *substream);
+	int (*ioctl)(struct snd_pcm_substream * substream,
+				 unsigned int cmd, void *arg);
 	int (*startup)(struct snd_pcm_substream *);
 	void (*shutdown)(struct snd_pcm_substream *);
 	int (*hw_params)(struct snd_pcm_substream *, struct snd_pcm_hw_params *);
 	int (*hw_free)(struct snd_pcm_substream *);
 	int (*prepare)(struct snd_pcm_substream *);
 	int (*trigger)(struct snd_pcm_substream *, int);
+	snd_pcm_uframes_t (*pointer)(struct snd_pcm_substream *substream);
+	int (*ack)(struct snd_pcm_substream *substream);
 };
 
 struct snd_soc_compr_ops {
@@ -839,6 +850,20 @@ struct snd_soc_platform {
 	struct dentry *debugfs_platform_root;
 	struct dentry *debugfs_dapm;
 #endif
+};
+
+struct snd_soc_component_driver {
+	 char *name;
+};
+
+struct snd_soc_component {
+	const char *name;
+	int id;
+	int num_dai;
+	struct device *dev;
+	struct list_head list;
+
+	const struct snd_soc_component_driver *driver;
 };
 
 struct snd_soc_dai_link {

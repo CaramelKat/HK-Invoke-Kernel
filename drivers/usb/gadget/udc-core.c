@@ -265,7 +265,7 @@ static void usb_gadget_remove_driver(struct usb_udc *udc)
 		usb_gadget_disconnect(udc->gadget);
 		udc->driver->disconnect(udc->gadget);
 		udc->driver->unbind(udc->gadget);
-		usb_gadget_udc_stop(udc->gadget, udc->driver);
+		usb_gadget_udc_stop(udc->gadget, NULL);
 	} else {
 		usb_gadget_stop(udc->gadget, udc->driver);
 	}
@@ -326,12 +326,12 @@ int usb_gadget_probe_driver(struct usb_gadget_driver *driver)
 			goto found;
 	}
 
-	pr_debug("couldn't find an available UDC\n");
+	printk("couldn't find an available UDC\n");
 	mutex_unlock(&udc_lock);
 	return -ENODEV;
 
 found:
-	dev_dbg(&udc->dev, "registering UDC driver [%s]\n",
+	dev_info(&udc->dev, "registering UDC driver [%s]\n",
 			driver->function);
 
 	udc->driver = driver;
@@ -346,7 +346,6 @@ found:
 			driver->unbind(udc->gadget);
 			goto err1;
 		}
-		usb_gadget_connect(udc->gadget);
 	} else {
 
 		ret = usb_gadget_start(udc->gadget, driver, driver->bind);

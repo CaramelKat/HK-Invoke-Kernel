@@ -126,13 +126,18 @@ static int dw_spi_mmio_remove(struct platform_device *pdev)
 	release_mem_region(mem->start, resource_size(mem));
 	return 0;
 }
-
+static const struct of_device_id dw_spi_mmio_of_match[] = {
+	{ .compatible = "snps,designware-spi", },
+	{ /* end of table */}
+};
+MODULE_DEVICE_TABLE(of, dw_spi_mmio_of_match);
 static struct platform_driver dw_spi_mmio_driver = {
 	.probe		= dw_spi_mmio_probe,
 	.remove		= dw_spi_mmio_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
 		.owner	= THIS_MODULE,
+		.of_match_table = dw_spi_mmio_of_match,
 	},
 };
 module_platform_driver(dw_spi_mmio_driver);

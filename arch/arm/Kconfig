@@ -527,6 +527,25 @@ config ARCH_IXP4XX
 	help
 	  Support for Intel's IXP4XX (XScale) family of processors.
 
+config ARCH_BERLIN
+	bool "Marvell Berlin Multimedia SoC"
+	select ARCH_HAS_CPUFREQ
+	select ARCH_HAS_OPP
+	select ARCH_REQUIRE_GPIOLIB
+	select ARM_GIC
+	select CLKDEV_LOOKUP
+	select COMMON_CLK
+	select CPU_V7
+	select GENERIC_CLOCKEVENTS
+	select GENERIC_GPIO
+	select HAVE_SMP
+	select MIGHT_HAVE_CACHE_L2X0
+	select DW_APB_TIMER
+	select SPARSE_IRQ
+	select USE_OF
+	help
+	  Support for Marvell Berlin Multimedia SoCs
+
 config ARCH_DOVE
 	bool "Marvell Dove"
 	select ARCH_REQUIRE_GPIOLIB
@@ -1022,6 +1041,8 @@ source "arch/arm/mach-at91/Kconfig"
 
 source "arch/arm/mach-bcm/Kconfig"
 
+source "arch/arm/mach-berlin/Kconfig"
+
 source "arch/arm/mach-clps711x/Kconfig"
 
 source "arch/arm/mach-cns3xxx/Kconfig"
@@ -1427,6 +1448,17 @@ config ARM_ERRATA_775420
 	 to deadlock. This workaround puts DSB before executing ISB if
 	 an abort may occur on cache maintenance.
 
+config ARM_ERRATA_814220
+	bool "ARM errata: Cache maintenance by set/way operations can execute out of order"
+	depends on CPU_V7
+	help
+	  This option enables the fix for erratum 814220 which affecting
+	  Cortex-A7 MPCore r0p2, r0p3, r0p4 and r0p5. The cache maintenance by set/way operation
+	  between different levels can execute out of order. So there will be issues
+	  when L2 flush to L3 complete before L1 flush to L2. Then L2 will contain dirty data
+	  which is not flushed to L3.
+	  This fix is to add dsb between different cache levels. It will make sure
+	  the flush of previous level finish before next level start.
 endmenu
 
 source "arch/arm/common/Kconfig"

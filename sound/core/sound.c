@@ -152,6 +152,7 @@ static int snd_open(struct inode *inode, struct file *file)
 	struct snd_minor *mptr = NULL;
 	const struct file_operations *old_fops;
 	int err = 0;
+	printk("Libresnd  snd_open\n");
 
 	if (minor >= ARRAY_SIZE(snd_minors))
 		return -ENODEV;

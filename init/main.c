@@ -850,6 +850,7 @@ static noinline void __init kernel_init_freeable(void)
 	/*
 	 * Wait until kthreadd is all set-up.
 	 */
+	volatile unsigned int *pSpiPinMux;
 	wait_for_completion(&kthreadd_done);
 
 	/* Now the scheduler is fully set up and can do blocking allocations */
@@ -900,4 +901,12 @@ static noinline void __init kernel_init_freeable(void)
 	 * we're essentially up and running. Get rid of the
 	 * initmem segments and start the user-mode stuff..
 	 */
+	*((unsigned int*)0xF7EA8008) = 0x18D249;//0x188249;
+	 pSpiPinMux= (volatile unsigned int*)0xF7EA800C;
+	 *pSpiPinMux &=0XFFFF803F; //enable spi
+
+	/* Program the gpio28 pinmux as gpio - to control thermal sensor */
+	pSpiPinMux= (volatile unsigned int*)0xF7EA8004;
+	*pSpiPinMux &= ~(7 << 18);
+	*pSpiPinMux |= (3 << 18);
 }

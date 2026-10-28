@@ -23,6 +23,32 @@
  *   substream
  * @substream: PCM substream
  */
+
+#define SND_DMAENGINE_PCM_FLAG_HALF_DUPLEX BIT(3)
+#define SND_DMAENGINE_PCM_FLAG_NO_RESIDUE BIT(2)
+
+struct snd_dmaengine_dai_dma_data {
+	dma_addr_t addr;
+	enum dma_slave_buswidth addr_width;
+	u32 maxburst;
+	unsigned int slave_id;
+	void *filter_data;
+};
+
+
+struct snd_dmaengine_pcm_config {
+	int (*prepare_slave_config)(struct snd_pcm_substream *substream,
+			struct snd_pcm_hw_params *params,
+			struct dma_slave_config *slave_config);
+	struct dma_chan *(*compat_request_channel)(
+			struct snd_soc_pcm_runtime *rtd,
+			struct snd_pcm_substream *substream);
+	dma_filter_fn compat_filter_fn;
+
+	const struct snd_pcm_hardware *pcm_hardware;
+	unsigned int prealloc_buffer_size;
+};
+
 static inline enum dma_transfer_direction
 snd_pcm_substream_to_dma_direction(const struct snd_pcm_substream *substream)
 {

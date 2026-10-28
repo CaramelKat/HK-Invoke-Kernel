@@ -210,10 +210,13 @@ static int cpu0_cpufreq_driver_init(void)
 		cpu_reg = NULL;
 	}
 
-	ret = of_init_opp_table(cpu_dev);
-	if (ret) {
-		pr_err("failed to init OPP table: %d\n", ret);
-		goto out_put_node;
+	ret = opp_get_opp_count(cpu_dev);
+	if (ret < 0) {
+		ret = of_init_opp_table(cpu_dev);
+		if (ret) {
+			pr_err("failed to init OPP table: %d\n", ret);
+			goto out_put_node;
+		}
 	}
 
 	ret = opp_init_cpufreq_table(cpu_dev, &freq_table);

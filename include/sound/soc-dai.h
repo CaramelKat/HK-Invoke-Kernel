@@ -162,6 +162,11 @@ struct snd_soc_dai_ops {
 	 * ALSA PCM audio operations - all optional.
 	 * Called by soc-core during audio PCM operations.
 	 */
+		int (*open)(struct snd_pcm_substream *substream);
+			int (*close)(struct snd_pcm_substream *substream);
+
+	int (*ioctl)(struct snd_pcm_substream * substream,
+		     unsigned int cmd, void *arg);
 	int (*startup)(struct snd_pcm_substream *,
 		struct snd_soc_dai *);
 	void (*shutdown)(struct snd_pcm_substream *,
@@ -176,6 +181,8 @@ struct snd_soc_dai_ops {
 		struct snd_soc_dai *);
 	int (*bespoke_trigger)(struct snd_pcm_substream *, int,
 		struct snd_soc_dai *);
+	snd_pcm_uframes_t (*pointer)(struct snd_pcm_substream *substream);
+	int (*ack)(struct snd_pcm_substream *substream);
 	/*
 	 * For hardware based FIFO caused delay reporting.
 	 * Optional.

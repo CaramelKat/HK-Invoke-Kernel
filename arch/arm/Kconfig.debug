@@ -89,6 +89,10 @@ choice
 		bool "Kernel low-level debugging on 9263 and 9g45"
 		depends on HAVE_AT91_DBGU1
 
+	config DEBUG_BERLIN_UART
+		bool "Kernel low-level debugging messages via Berlin UART"
+		depends on ARCH_BERLIN
+
 	config DEBUG_CLPS711X_UART1
 		bool "Kernel low-level debugging messages via UART1"
 		depends on ARCH_CLPS711X
@@ -491,6 +495,7 @@ endchoice
 
 config DEBUG_LL_INCLUDE
 	string
+	default "debug/berlin.S" if DEBUG_BERLIN_UART
 	default "debug/icedcc.S" if DEBUG_ICEDCC
 	default "debug/imx.S" if DEBUG_IMX1_UART || \
 				 DEBUG_IMX25_UART || \

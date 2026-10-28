@@ -1,0 +1,43 @@
+/*
+ * MARVELL BERLIN2Q DMP board device tree source
+ *
+ * Author:	Jisheng Zhang <jszhang@marvell.com>
+ * Copyright (c) 2013 Marvell International Ltd.
+ *		http://www.marvell.com
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+*/
+
+/dts-v1/;
+/include/ "berlin2q.dtsi"
+
+/ {
+	model = "MARVELL BG2Q DMP board based on BERLIN2Q";
+	compatible = "marvell,berlin2q-dmp", "marvell,berlin2q", "marvell,berlin";
+
+	soc {
+		usbphy@F7B74000 {
+			pwr-gpio = <&bankb 8 0>;
+		};
+
+		usbphy@F7B78000 {
+			pwr-gpio = <&bankb 10 0>;
+		};
+
+		usbphy@F7A2F400 {
+			pwr-gpio = <&bankb 12 0>;
+		};
+
+		vmmc_reg_sdio1: fixed-regulator {
+			gpio = <&banka 13 0>;
+		};
+
+		vqmmc_reg_sdio1: gpio-regulator {
+			gpios = <&banke 7 0>;
+			states = <3300000 0x1
+				1800000 0x0>;
+		};
+	};
+};

@@ -564,6 +564,17 @@ static void __init pl310_of_setup(const struct device_node *np,
 	u32 data[3] = { 0, 0, 0 };
 	u32 tag[3] = { 0, 0, 0 };
 	u32 filter[2] = { 0, 0 };
+	u32 pwr_ctrl, prefetch_ctrl;
+
+	pwr_ctrl = prefetch_ctrl = 0;
+	of_property_read_u32(np, "arm,pwr-ctrl", &pwr_ctrl);
+	if (pwr_ctrl)
+		writel_relaxed(pwr_ctrl, l2x0_base + L2X0_POWER_CTRL);
+
+	of_property_read_u32(np, "arm,prefetch-ctrl",
+			     &prefetch_ctrl);
+	if (prefetch_ctrl)
+		writel_relaxed(prefetch_ctrl, l2x0_base + L2X0_PREFETCH_CTRL);
 
 	of_property_read_u32_array(np, "arm,tag-latency", tag, ARRAY_SIZE(tag));
 	if (tag[0] && tag[1] && tag[2])

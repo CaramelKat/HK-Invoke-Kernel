@@ -82,6 +82,8 @@ struct snd_pcm_ops {
 			     unsigned long offset);
 	int (*mmap)(struct snd_pcm_substream *substream, struct vm_area_struct *vma);
 	int (*ack)(struct snd_pcm_substream *substream);
+	int (*wall_clock_start_at)(struct snd_pcm_substream *substream, const struct timespec *ts);
+	int (*wall_clock_start_at_cancel)(struct snd_pcm_substream *substream);
 };
 
 /*
@@ -204,6 +206,7 @@ struct snd_pcm_ops {
 #define SNDRV_PCM_FMTBIT_FLOAT64	SNDRV_PCM_FMTBIT_FLOAT64_BE
 #define SNDRV_PCM_FMTBIT_IEC958_SUBFRAME SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_BE
 #endif
+#define SNDRV_PCM_START_AT_TSTAMP_TYPE_NULL (SNDRV_PCM_TSTAMP_TYPE_LAST+1)
 
 struct snd_pcm_file {
 	struct snd_pcm_substream *substream;
@@ -284,6 +287,7 @@ struct snd_pcm_runtime {
 	unsigned long hw_ptr_buffer_jiffies; /* buffer time in jiffies */
 	snd_pcm_sframes_t delay;	/* extra delay; typically FIFO size */
 	u64 hw_ptr_wrap;                /* offset for hw_ptr due to boundary wrap-around */
+    struct snd_pcm_stat play_stat;
 
 	/* -- HW params -- */
 	snd_pcm_access_t access;	/* access mode */
@@ -359,6 +363,11 @@ struct snd_pcm_runtime {
 #ifdef CONFIG_SND_PCM_XRUN_DEBUG
 	struct snd_pcm_hwptr_log *hwptr_log;
 #endif
+
+	int start_at_tstamp_type;	/* start_at timer tstamp_type Set to
+					   SNDRV_PCM_START_AT_TSTAMP_TYPE_NULL if not active */
+	void *start_at_timer_data;	/* start_at timer data */
+
 };
 
 struct snd_pcm_group {		/* keep linked substreams */
@@ -927,10 +936,17 @@ void snd_pcm_timer_done(struct snd_pcm_substream *substream);
 static inline void snd_pcm_gettime(struct snd_pcm_runtime *runtime,
 				   struct timespec *tv)
 {
-	if (runtime->tstamp_type == SNDRV_PCM_TSTAMP_TYPE_MONOTONIC)
-		do_posix_clock_monotonic_gettime(tv);
-	else
+	switch (runtime->tstamp_type) {
+	case SNDRV_PCM_TSTAMP_TYPE_MONOTONIC:
+		ktime_get_ts(tv);
+		break;
+	case SNDRV_PCM_TSTAMP_TYPE_MONOTONIC_RAW:
+		getrawmonotonic(tv);
+		break;
+	default:
 		getnstimeofday(tv);
+		break;
+	}
 }
 
 /*

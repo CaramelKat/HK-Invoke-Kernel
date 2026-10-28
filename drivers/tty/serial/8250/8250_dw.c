@@ -25,6 +25,30 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
+#include "8250.h"
+
+/* Offsets for the DesignWare specific registers */
+#define DW_UART_USR	0x1f /* UART Status Register */
+#define DW_UART_CPR	0xf4 /* Component Parameter Register */
+#define DW_UART_UCV	0xf8 /* UART Component Version */
+
+/* Component Parameter Register bits */
+#define DW_UART_CPR_ABP_DATA_WIDTH	(3 << 0)
+#define DW_UART_CPR_AFCE_MODE		(1 << 4)
+#define DW_UART_CPR_THRE_MODE		(1 << 5)
+#define DW_UART_CPR_SIR_MODE		(1 << 6)
+#define DW_UART_CPR_SIR_LP_MODE		(1 << 7)
+#define DW_UART_CPR_ADDITIONAL_FEATURES	(1 << 8)
+#define DW_UART_CPR_FIFO_ACCESS		(1 << 9)
+#define DW_UART_CPR_FIFO_STAT		(1 << 10)
+#define DW_UART_CPR_SHADOW		(1 << 11)
+#define DW_UART_CPR_ENCODED_PARMS	(1 << 12)
+#define DW_UART_CPR_DMA_EXTRA		(1 << 13)
+#define DW_UART_CPR_FIFO_MODE		(0xff << 16)
+/* Helper for fifo size calculation */
+#define DW_UART_CPR_FIFO_SIZE(a)	(((a >> 16) & 0xff) * 16)
+
+
 struct dw8250_data {
 	int	last_lcr;
 	int	line;
@@ -66,9 +90,6 @@ static unsigned int dw8250_serial_in32(struct uart_port *p, int offset)
 	return readl(p->membase + offset);
 }
 
-/* Offset for the DesignWare's UART Status Register. */
-#define UART_USR	0x1f
-
 static int dw8250_handle_irq(struct uart_port *p)
 {
 	struct dw8250_data *d = p->private_data;
@@ -78,7 +99,7 @@ static int dw8250_handle_irq(struct uart_port *p)
 		return 1;
 	} else if ((iir & UART_IIR_BUSY) == UART_IIR_BUSY) {
 		/* Clear the USR and write the LCR again. */
-		(void)p->serial_in(p, UART_USR);
+		(void)p->serial_in(p, DW_UART_USR);
 		p->serial_out(p, UART_LCR, d->last_lcr);
 
 		return 1;
@@ -87,61 +108,115 @@ static int dw8250_handle_irq(struct uart_port *p)
 	return 0;
 }
 
+static int dw8250_probe_of(struct uart_port *p)
+{
+	struct device_node	*np = p->dev->of_node;
+	u32			val;
+
+	if (!of_property_read_u32(np, "reg-io-width", &val)) {
+		switch (val) {
+		case 1:
+			break;
+		case 4:
+			p->iotype = UPIO_MEM32;
+			p->serial_in = dw8250_serial_in32;
+			p->serial_out = dw8250_serial_out32;
+			break;
+		default:
+			dev_err(p->dev, "unsupported reg-io-width (%u)\n", val);
+			return -EINVAL;
+		}
+	}
+
+	if (!of_property_read_u32(np, "reg-shift", &val))
+		p->regshift = val;
+
+	if (of_property_read_u32(np, "clock-frequency", &val)) {
+		dev_err(p->dev, "no clock-frequency property set\n");
+		return -EINVAL;
+	}
+	p->uartclk = val;
+
+	return 0;
+}
+
+static void dw8250_setup_port(struct uart_8250_port *up)
+{
+	struct uart_port	*p = &up->port;
+	u32			reg = readl(p->membase + DW_UART_UCV);
+
+	/*
+	 * If the Component Version Register returns zero, we know that
+	 * ADDITIONAL_FEATURES are not enabled. No need to go any further.
+	 */
+	if (!reg)
+		return;
+
+	dev_dbg_ratelimited(p->dev, "Designware UART version %c.%c%c\n",
+		(reg >> 24) & 0xff, (reg >> 16) & 0xff, (reg >> 8) & 0xff);
+
+	reg = readl(p->membase + DW_UART_CPR);
+	if (!reg)
+		return;
+
+	/* Select the type based on fifo */
+	if (reg & DW_UART_CPR_FIFO_MODE) {
+		p->type = PORT_16550A;
+		p->flags |= UPF_FIXED_TYPE;
+		p->fifosize = DW_UART_CPR_FIFO_SIZE(reg);
+		up->tx_loadsz = p->fifosize;
+		up->capabilities = UART_CAP_FIFO;
+	}
+
+	if (reg & DW_UART_CPR_AFCE_MODE)
+		up->capabilities |= UART_CAP_AFE;
+}
+
 static int dw8250_probe(struct platform_device *pdev)
 {
 	struct uart_8250_port uart = {};
 	struct resource *regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct resource *irq = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-	struct device_node *np = pdev->dev.of_node;
-	u32 val;
 	struct dw8250_data *data;
+	int err;
 
 	if (!regs || !irq) {
 		dev_err(&pdev->dev, "no registers/irq defined\n");
 		return -EINVAL;
 	}
 
-	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-	uart.port.private_data = data;
-
 	spin_lock_init(&uart.port.lock);
 	uart.port.mapbase = regs->start;
 	uart.port.irq = irq->start;
 	uart.port.handle_irq = dw8250_handle_irq;
 	uart.port.type = PORT_8250;
-	uart.port.flags = UPF_SHARE_IRQ | UPF_BOOT_AUTOCONF | UPF_IOREMAP |
-		UPF_FIXED_PORT | UPF_FIXED_TYPE;
+	uart.port.flags = UPF_SHARE_IRQ | UPF_BOOT_AUTOCONF | UPF_FIXED_PORT;
 	uart.port.dev = &pdev->dev;
+
+	uart.port.membase = devm_ioremap(&pdev->dev, regs->start,
+					 resource_size(regs));
+	if (!uart.port.membase)
+		return -ENOMEM;
 
 	uart.port.iotype = UPIO_MEM;
 	uart.port.serial_in = dw8250_serial_in;
 	uart.port.serial_out = dw8250_serial_out;
-	if (!of_property_read_u32(np, "reg-io-width", &val)) {
-		switch (val) {
-		case 1:
-			break;
-		case 4:
-			uart.port.iotype = UPIO_MEM32;
-			uart.port.serial_in = dw8250_serial_in32;
-			uart.port.serial_out = dw8250_serial_out32;
-			break;
-		default:
-			dev_err(&pdev->dev, "unsupported reg-io-width (%u)\n",
-				val);
-			return -EINVAL;
-		}
+
+	dw8250_setup_port(&uart);
+
+	if (pdev->dev.of_node) {
+		err = dw8250_probe_of(&uart.port);
+		if (err)
+			return err;
+	} else {
+		return -ENODEV;
 	}
 
-	if (!of_property_read_u32(np, "reg-shift", &val))
-		uart.port.regshift = val;
+	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
 
-	if (of_property_read_u32(np, "clock-frequency", &val)) {
-		dev_err(&pdev->dev, "no clock-frequency property set\n");
-		return -EINVAL;
-	}
-	uart.port.uartclk = val;
+	uart.port.private_data = data;
 
 	data->line = serial8250_register_8250_port(&uart);
 	if (data->line < 0)
@@ -184,17 +259,17 @@ static int dw8250_resume(struct platform_device *pdev)
 #define dw8250_resume NULL
 #endif /* CONFIG_PM */
 
-static const struct of_device_id dw8250_match[] = {
+static const struct of_device_id dw8250_of_match[] = {
 	{ .compatible = "snps,dw-apb-uart" },
 	{ /* Sentinel */ }
 };
-MODULE_DEVICE_TABLE(of, dw8250_match);
+MODULE_DEVICE_TABLE(of, dw8250_of_match);
 
 static struct platform_driver dw8250_platform_driver = {
 	.driver = {
 		.name		= "dw-apb-uart",
 		.owner		= THIS_MODULE,
-		.of_match_table	= dw8250_match,
+		.of_match_table	= dw8250_of_match,
 	},
 	.probe			= dw8250_probe,
 	.remove			= dw8250_remove,

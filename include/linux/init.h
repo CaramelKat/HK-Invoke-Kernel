@@ -84,6 +84,11 @@
 #define __initdata_refok __refdata
 #define __exit_refok     __ref
 
+#if defined(MODULE) || defined(CONFIG_HOTPLUG)
+#define __devexit_p(x) x
+#else
+#define __devexit_p(x) NULL
+#endif
 
 #ifdef MODULE
 #define __exitused
@@ -92,6 +97,14 @@
 #endif
 
 #define __exit          __section(.exit.text) __exitused __cold notrace
+/* Used for HOTPLUG */
+#define __devinit        __section(.devinit.text) __cold notrace
+#define __devinitdata    __section(.devinit.data)
+#define __devinitconst   __section(.devinit.rodata)
+#define __devexit        __section(.devexit.text) __exitused __cold notrace
+#define __devexitdata    __section(.devexit.data)
+#define __devexitconst   __section(.devexit.rodata)
+
 
 /* Used for HOTPLUG_CPU */
 #define __cpuinit        __section(.cpuinit.text) __cold notrace

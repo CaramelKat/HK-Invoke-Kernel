@@ -30,10 +30,15 @@
 
 #include "wm8904.h"
 
+extern int SearchEnv(unsigned char *ENV,unsigned char UID1,int len);
+int check_hw_param();
+
 enum wm8904_type {
 	WM8904,
 	WM8912,
 };
+unsigned int v_wm8904=1;
+extern unsigned int v_BtMasterClk;
 
 #define WM8904_NUM_DCS_CHANNELS 4
 
@@ -123,8 +128,8 @@ static const struct reg_default wm8904_reg_defaults[] = {
 	{ 45,  0x0085 },     /* R45  - Analogue Right Input 0 */
 	{ 46,  0x0044 },     /* R46  - Analogue Left Input 1 */
 	{ 47,  0x0044 },     /* R47  - Analogue Right Input 1 */
-	{ 57,  0x002D },     /* R57  - Analogue OUT1 Left */
-	{ 58,  0x002D },     /* R58  - Analogue OUT1 Right */
+	{ 57,  0x0039 },     /* R57  - Analogue OUT1 Left */
+	{ 58,  0x0039 },     /* R58  - Analogue OUT1 Right */
 	{ 59,  0x0039 },     /* R59  - Analogue OUT2 Left */
 	{ 60,  0x0039 },     /* R60  - Analogue OUT2 Right */
 	{ 61,  0x0000 },     /* R61  - Analogue OUT12 ZC */
@@ -316,9 +321,66 @@ static bool wm8904_readable_register(struct device *dev, unsigned int reg)
 
 static int wm8904_configure_clocking(struct snd_soc_codec *codec)
 {
+
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	unsigned int clock0, clock2, rate;
+printk("wm8904_configure_clocking\n");
 
+		snd_soc_write(codec, 0x15,0x1405);
+snd_soc_write(codec, 0xa,0x1); //ajith
+	snd_soc_write(codec, 0x2e,0x54 );
+	snd_soc_write(codec, 0x2f,0x54 );
+	snd_soc_write(codec, 0x2c,0x10 );
+	snd_soc_write(codec, 0x2d,0x10 );
+	snd_soc_write(codec, 0x3a,0xf9 );
+
+
+	snd_soc_write(codec, 0x19,2);
+	snd_soc_write(codec, 0x1a,0xe8);
+	snd_soc_write(codec, 0x1b,0x20);
+	snd_soc_write(codec, 0x78,0);
+	snd_soc_write(codec, 0x74,1);
+	snd_soc_write(codec, 0x16,0x7);
+	snd_soc_write(codec, 0x39,0xf9);
+	snd_soc_write(codec, 0x3,0x0);
+	snd_soc_write(codec, 0x77,0x100);
+	snd_soc_write(codec, 0x12,0xc); //ajith
+	snd_soc_write(codec, 0x12,0xf); //ajith
+	snd_soc_write(codec, 0x0C,0x3); //ajith
+	//snd_soc_write(codec, 0x16,1<<14|1<<2);
+	snd_soc_write(codec, 0x21,0x600);
+	printk("BT chip is master\n");
+	return 0;
+
+#if 0
+	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
+	unsigned int clock0, clock2, rate;
+printk("wm8904_configure_clocking\n");
+
+
+
+	if(!v_wm8904)
+	return 0;
+	snd_soc_write(codec, 0x2e,0x54 );
+	snd_soc_write(codec, 0x2f,0x54 );
+	snd_soc_write(codec, 0x2c,0x10 );
+	snd_soc_write(codec, 0x2d,0x10 );
+	
+	/*required for LS6BT*/
+	if(v_BtMasterClk)
+	{
+		snd_soc_write(codec, 0x19,2);
+		snd_soc_write(codec, 0x1a,0xe8);
+		snd_soc_write(codec, 0x1b,0x20);
+		snd_soc_write(codec, 0x78,0);
+		snd_soc_write(codec, 0x74,1);
+		snd_soc_write(codec, 0x16,snd_soc_read(codec, 0x16)|1<<14);
+		//snd_soc_write(codec, 0x16,1<<2);
+		
+		printk("BT chip is master\n");
+		return;
+	}
+	
 	/* Gate the clock while we're updating to avoid misclocking */
 	clock2 = snd_soc_read(codec, WM8904_CLOCK_RATES_2);
 	snd_soc_update_bits(codec, WM8904_CLOCK_RATES_2,
@@ -368,6 +430,8 @@ static int wm8904_configure_clocking(struct snd_soc_codec *codec)
 	dev_dbg(codec->dev, "CLK_SYS is %dHz\n", wm8904->sysclk_rate);
 
 	return 0;
+
+#endif
 }
 
 static void wm8904_set_drc(struct snd_soc_codec *codec)
@@ -375,7 +439,8 @@ static void wm8904_set_drc(struct snd_soc_codec *codec)
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	struct wm8904_pdata *pdata = wm8904->pdata;
 	int save, i;
-
+	if(!v_wm8904)
+	return 0;
 	/* Save any enables; the configuration should clear them. */
 	save = snd_soc_read(codec, WM8904_DRC_0);
 
@@ -386,6 +451,7 @@ static void wm8904_set_drc(struct snd_soc_codec *codec)
 	/* Reenable the DRC */
 	snd_soc_update_bits(codec, WM8904_DRC_0,
 			    WM8904_DRC_ENA | WM8904_DRC_DAC_PATH, save);
+//printk("wm8904_set_drc end\n");
 }
 
 static int wm8904_put_drc_enum(struct snd_kcontrol *kcontrol,
@@ -395,6 +461,8 @@ static int wm8904_put_drc_enum(struct snd_kcontrol *kcontrol,
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	struct wm8904_pdata *pdata = wm8904->pdata;
 	int value = ucontrol->value.integer.value[0];
+	if(!v_wm8904)
+	return 0;
 
 	if (value >= pdata->num_drc_cfgs)
 		return -EINVAL;
@@ -402,6 +470,7 @@ static int wm8904_put_drc_enum(struct snd_kcontrol *kcontrol,
 	wm8904->drc_cfg = value;
 
 	wm8904_set_drc(codec);
+//printk("wm8904_put_drc_enum\n");
 
 	return 0;
 }
@@ -423,8 +492,12 @@ static void wm8904_set_retune_mobile(struct snd_soc_codec *codec)
 	struct wm8904_pdata *pdata = wm8904->pdata;
 	int best, best_val, save, i, cfg;
 
+printk("wm8904_set_retune_mobile\n");
+
 	if (!pdata || !wm8904->num_retune_mobile_texts)
 		return;
+	if(!v_wm8904)
+	return 0;
 
 	/* Find the version of the currently selected configuration
 	 * with the nearest sample rate. */
@@ -457,6 +530,7 @@ static void wm8904_set_retune_mobile(struct snd_soc_codec *codec)
 				pdata->retune_mobile_cfgs[best].regs[i]);
 
 	snd_soc_update_bits(codec, WM8904_EQ1, WM8904_EQ_ENA, save);
+//printk("wm8904_set_retune_mobile end\n");
 }
 
 static int wm8904_put_retune_mobile_enum(struct snd_kcontrol *kcontrol,
@@ -467,6 +541,8 @@ static int wm8904_put_retune_mobile_enum(struct snd_kcontrol *kcontrol,
 	struct wm8904_pdata *pdata = wm8904->pdata;
 	int value = ucontrol->value.integer.value[0];
 
+printk("wm8904_put_retune_mobile_enum\n");
+
 	if (value >= pdata->num_retune_mobile_cfgs)
 		return -EINVAL;
 
@@ -474,6 +550,7 @@ static int wm8904_put_retune_mobile_enum(struct snd_kcontrol *kcontrol,
 
 	wm8904_set_retune_mobile(codec);
 
+//printk("wm8904_put_retune_mobile_enum end\n");
 	return 0;
 }
 
@@ -488,13 +565,14 @@ static int wm8904_get_retune_mobile_enum(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static int deemph_settings[] = { 0, 32000, 44100, 48000 };
+static int deemph_settings[] = { 0, 32000, 44100, 48000,96000 };
 
 static int wm8904_set_deemph(struct snd_soc_codec *codec)
 {
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int val, i, best;
-
+	if(!v_wm8904)
+	return 0;
 	/* If we're using deemphasis select the nearest available sample 
 	 * rate.
 	 */
@@ -512,6 +590,7 @@ static int wm8904_set_deemph(struct snd_soc_codec *codec)
 	}
 
 	dev_dbg(codec->dev, "Set deemphasis %d\n", val);
+//printk("wm8904_set_deemph end\n");
 
 	return snd_soc_update_bits(codec, WM8904_DAC_DIGITAL_1,
 				   WM8904_DEEMPH_MASK, val);
@@ -522,8 +601,9 @@ static int wm8904_get_deemph(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
-
+//printk("wm8904_get_deemph\n");
 	ucontrol->value.enumerated.item[0] = wm8904->deemph;
+//printk("wm8904_get_deemph end\n");
 	return 0;
 }
 
@@ -533,12 +613,12 @@ static int wm8904_put_deemph(struct snd_kcontrol *kcontrol,
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int deemph = ucontrol->value.enumerated.item[0];
-
+//printk("wm8904_put_deemph\n");
 	if (deemph > 1)
 		return -EINVAL;
 
 	wm8904->deemph = deemph;
-
+//printk("wm8904_put_deemph end\n");
 	return wm8904_set_deemph(codec);
 }
 
@@ -547,6 +627,7 @@ static const DECLARE_TLV_DB_SCALE(digital_tlv, -7200, 75, 1);
 static const DECLARE_TLV_DB_SCALE(out_tlv, -5700, 100, 0);
 static const DECLARE_TLV_DB_SCALE(sidetone_tlv, -3600, 300, 0);
 static const DECLARE_TLV_DB_SCALE(eq_tlv, -1200, 100, 0);
+static const DECLARE_TLV_DB_LINEAR(master_tlv, -7200, 0);
 
 static const char *input_mode_text[] = {
 	"Single-Ended", "Differential Line", "Differential Mic"
@@ -565,13 +646,22 @@ static const char *hpf_mode_text[] = {
 static const struct soc_enum hpf_mode =
 	SOC_ENUM_SINGLE(WM8904_ADC_DIGITAL_0, 5, 4, hpf_mode_text);
 
+static const char *mute_mode_text[] = {
+        "Hard", "Soft"
+};
+
+static const struct soc_enum mute_mode =
+        SOC_ENUM_SINGLE(WM8904_DAC_DIGITAL_1, 9, 2, mute_mode_text);
+
+
 static int wm8904_adc_osr_put(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	unsigned int val;
 	int ret;
-
+	if(!v_wm8904)
+	return 0;
 	ret = snd_soc_put_volsw(kcontrol, ucontrol);
 	if (ret < 0)
 		return ret;
@@ -584,6 +674,7 @@ static int wm8904_adc_osr_put(struct snd_kcontrol *kcontrol,
 	snd_soc_update_bits(codec, WM8904_ADC_TEST_0,
 			    WM8904_ADC_128_OSR_TST_MODE | WM8904_ADC_BIASX1P5,
 			    val);
+//printk("wm8904_adc_osr_put end\n");
 
 	return ret;
 }
@@ -620,6 +711,11 @@ static const struct soc_enum drc_path =
 	SOC_ENUM_SINGLE(WM8904_DRC_0, 14, 2, drc_path_text);
 
 static const struct snd_kcontrol_new wm8904_dac_snd_controls[] = {
+SOC_DOUBLE_R_TLV("Master Volume", WM8904_DAC_DIGITAL_VOLUME_LEFT,
+	 WM8904_DAC_DIGITAL_VOLUME_RIGHT, 1, 100, 0, master_tlv),
+SOC_SINGLE("Master Switch", WM8904_DAC_DIGITAL_1,
+	      3, 1, 1),
+SOC_ENUM("Mute Volume", mute_mode),
 SOC_SINGLE_TLV("Digital Playback Boost Volume", 
 	       WM8904_AUDIO_INTERFACE_0, 9, 3, 0, dac_boost_tlv),
 SOC_DOUBLE_R_TLV("Digital Playback Volume", WM8904_DAC_DIGITAL_VOLUME_LEFT,
@@ -663,20 +759,26 @@ SOC_SINGLE_TLV("EQ5 Volume", WM8904_EQ6, 0, 24, 0, eq_tlv),
 static int cp_event(struct snd_soc_dapm_widget *w,
 		    struct snd_kcontrol *kcontrol, int event)
 {
+	printk("cp_event\n");
 	BUG_ON(event != SND_SOC_DAPM_POST_PMU);
 
 	/* Maximum startup time */
 	udelay(500);
-
+//printk("cp_event end\n");
 	return 0;
 }
 
 static int sysclk_event(struct snd_soc_dapm_widget *w,
 			 struct snd_kcontrol *kcontrol, int event)
 {
+
+    return 0; //Not required, set at boot up
 	struct snd_soc_codec *codec = w->codec;
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
+printk("wm8904_set_bias_level7\n");
 
+	if(!v_wm8904)
+	return 0;
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		/* If we're using the FLL then we only start it when
@@ -705,28 +807,32 @@ static int sysclk_event(struct snd_soc_dapm_widget *w,
 				    WM8904_FLL_OSC_ENA | WM8904_FLL_ENA, 0);
 		break;
 	}
-
+//printk("sysclk_event end\n");
 	return 0;
 }
+static int out_pga_event_bootTime(struct snd_soc_codec *codec,int reg,
+			 int event)
 
-static int out_pga_event(struct snd_soc_dapm_widget *w,
-			 struct snd_kcontrol *kcontrol, int event)
 {
-	struct snd_soc_codec *codec = w->codec;
+
+printk("Libre : out_pga_event_bootTime\n");
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
-	int reg, val;
+	int val;
 	int dcs_mask;
 	int dcs_l, dcs_r;
 	int dcs_l_reg, dcs_r_reg;
 	int timeout;
 	int pwr_reg;
 
+	if(!v_wm8904)
+	return 0;
 	/* This code is shared between HP and LINEOUT; we do all our
 	 * power management in stereo pairs to avoid latency issues so
 	 * we reuse shift to identify which rather than strcmp() the
 	 * name. */
-	reg = w->shift;
 
+	//if (reg == WM8904_ANALOGUE_LINEOUT_0)   //todo Disable Line out properly
+	//	return 0;
 	switch (reg) {
 	case WM8904_ANALOGUE_HP_0:
 		pwr_reg = WM8904_POWER_MANAGEMENT_2;
@@ -771,6 +877,8 @@ static int out_pga_event(struct snd_soc_dapm_widget *w,
 		snd_soc_update_bits(codec, WM8904_DC_SERVO_0,
 				    dcs_mask, dcs_mask);
 
+		snd_soc_write(codec, WM8904_DC_SERVO_2,0x0F0F ); 
+
 		/* Either calibrate the DC servo or restore cached state
 		 * if we have that.
 		 */
@@ -786,7 +894,7 @@ static int out_pga_event(struct snd_soc_dapm_widget *w,
 
 			timeout = 20;
 		} else {
-			dev_dbg(codec->dev, "Calibrating DC servo\n");
+			printk("*** Calibrating DC servo\n");
 
 			snd_soc_write(codec, WM8904_DC_SERVO_1,
 				dcs_mask << WM8904_DCS_TRIG_STARTUP_0_SHIFT);
@@ -805,9 +913,9 @@ static int out_pga_event(struct snd_soc_dapm_widget *w,
 		} while (--timeout);
 
 		if ((val & dcs_mask) != dcs_mask)
-			dev_warn(codec->dev, "DC servo timed out\n");
+			printk("DC servo timed out\n");
 		else
-			dev_dbg(codec->dev, "DC servo ready\n");
+			printk( "DC servo ready\n");
 
 		/* Enable the output stage */
 		snd_soc_update_bits(codec, reg,
@@ -854,7 +962,163 @@ static int out_pga_event(struct snd_soc_dapm_widget *w,
 				    0);
 		break;
 	}
+//printk("out_pga_event end\n");
+	return 0;
+}
 
+static int out_pga_event(struct snd_soc_dapm_widget *w,
+			 struct snd_kcontrol *kcontrol, int event)
+{
+
+	struct snd_soc_codec *codec = w->codec;
+	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
+	int reg, val;
+	int dcs_mask;
+	int dcs_l, dcs_r;
+	int dcs_l_reg, dcs_r_reg;
+	int timeout;
+	int pwr_reg;
+printk("Libre : out_pga_event\n");
+
+	if(!v_wm8904)
+	return 0;
+	/* This code is shared between HP and LINEOUT; we do all our
+	 * power management in stereo pairs to avoid latency issues so
+	 * we reuse shift to identify which rather than strcmp() the
+	 * name. */
+	reg = w->shift;
+	//if (reg == WM8904_ANALOGUE_LINEOUT_0)   //todo Disable Line out properly
+	//	return 0;
+	switch (reg) {
+	case WM8904_ANALOGUE_HP_0:
+		pwr_reg = WM8904_POWER_MANAGEMENT_2;
+		dcs_mask = WM8904_DCS_ENA_CHAN_0 | WM8904_DCS_ENA_CHAN_1;
+		dcs_r_reg = WM8904_DC_SERVO_8;
+		dcs_l_reg = WM8904_DC_SERVO_9;
+		dcs_l = 0;
+		dcs_r = 1;
+		break;
+	case WM8904_ANALOGUE_LINEOUT_0:
+		pwr_reg = WM8904_POWER_MANAGEMENT_3;
+		dcs_mask = WM8904_DCS_ENA_CHAN_2 | WM8904_DCS_ENA_CHAN_3;
+		dcs_r_reg = WM8904_DC_SERVO_6;
+		dcs_l_reg = WM8904_DC_SERVO_7;
+		dcs_l = 2;
+		dcs_r = 3;
+		break;
+	default:
+		BUG();
+		return -EINVAL;
+	}
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		/* Power on the PGAs */
+		snd_soc_update_bits(codec, pwr_reg,
+				    WM8904_HPL_PGA_ENA | WM8904_HPR_PGA_ENA,
+				    WM8904_HPL_PGA_ENA | WM8904_HPR_PGA_ENA);
+
+		/* Power on the amplifier */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_ENA | WM8904_HPR_ENA,
+				    WM8904_HPL_ENA | WM8904_HPR_ENA);
+
+
+		/* Enable the first stage */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_ENA_DLY | WM8904_HPR_ENA_DLY,
+				    WM8904_HPL_ENA_DLY | WM8904_HPR_ENA_DLY);
+
+		/* Power up the DC servo */
+		snd_soc_update_bits(codec, WM8904_DC_SERVO_0,
+				    dcs_mask, dcs_mask);
+
+		snd_soc_write(codec, WM8904_DC_SERVO_2,0x0F0F ); 
+
+		/* Either calibrate the DC servo or restore cached state
+		 * if we have that.
+		 */
+		if (wm8904->dcs_state[dcs_l] || wm8904->dcs_state[dcs_r]) {
+			dev_dbg(codec->dev, "Restoring DC servo state\n");
+
+			snd_soc_write(codec, dcs_l_reg,
+				      wm8904->dcs_state[dcs_l]);
+			snd_soc_write(codec, dcs_r_reg,
+				      wm8904->dcs_state[dcs_r]);
+
+			snd_soc_write(codec, WM8904_DC_SERVO_1, dcs_mask);
+
+			timeout = 20;
+		} else {
+			printk("*** Calibrating DC servo\n");
+
+			snd_soc_write(codec, WM8904_DC_SERVO_1,
+				dcs_mask << WM8904_DCS_TRIG_STARTUP_0_SHIFT);
+
+			timeout = 500;
+		}
+
+		/* Wait for DC servo to complete */
+		dcs_mask <<= WM8904_DCS_CAL_COMPLETE_SHIFT;
+		do {
+			val = snd_soc_read(codec, WM8904_DC_SERVO_READBACK_0);
+			if ((val & dcs_mask) == dcs_mask)
+				break;
+
+			msleep(1);
+		} while (--timeout);
+
+		if ((val & dcs_mask) != dcs_mask)
+			printk("DC servo timed out\n");
+		else
+			printk( "DC servo ready\n");
+
+		/* Enable the output stage */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_ENA_OUTP | WM8904_HPR_ENA_OUTP,
+				    WM8904_HPL_ENA_OUTP | WM8904_HPR_ENA_OUTP);
+		break;
+
+	case SND_SOC_DAPM_POST_PMU:
+		/* Unshort the output itself */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_RMV_SHORT |
+				    WM8904_HPR_RMV_SHORT,
+				    WM8904_HPL_RMV_SHORT |
+				    WM8904_HPR_RMV_SHORT);
+
+		break;
+
+	case SND_SOC_DAPM_PRE_PMD:
+		/* Short the output */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_RMV_SHORT |
+				    WM8904_HPR_RMV_SHORT, 0);
+		break;
+
+	case SND_SOC_DAPM_POST_PMD:
+		/* Cache the DC servo configuration; this will be
+		 * invalidated if we change the configuration. */
+		wm8904->dcs_state[dcs_l] = snd_soc_read(codec, dcs_l_reg);
+		wm8904->dcs_state[dcs_r] = snd_soc_read(codec, dcs_r_reg);
+
+		snd_soc_update_bits(codec, WM8904_DC_SERVO_0,
+				    dcs_mask, 0);
+
+		/* Disable the amplifier input and output stages */
+		snd_soc_update_bits(codec, reg,
+				    WM8904_HPL_ENA | WM8904_HPR_ENA |
+				    WM8904_HPL_ENA_DLY | WM8904_HPR_ENA_DLY |
+				    WM8904_HPL_ENA_OUTP | WM8904_HPR_ENA_OUTP,
+				    0);
+
+		/* PGAs too */
+		snd_soc_update_bits(codec, pwr_reg,
+				    WM8904_HPL_PGA_ENA | WM8904_HPR_PGA_ENA,
+				    0);
+		break;
+	}
+//printk("out_pga_event end\n");
 	return 0;
 }
 
@@ -967,7 +1231,7 @@ SND_SOC_DAPM_MUX("DACR Mux", SND_SOC_NOPM, 0, 0, &aifinr_mux),
 SND_SOC_DAPM_DAC("DACL", NULL, WM8904_POWER_MANAGEMENT_6, 3, 0),
 SND_SOC_DAPM_DAC("DACR", NULL, WM8904_POWER_MANAGEMENT_6, 2, 0),
 
-SND_SOC_DAPM_SUPPLY("Charge pump", WM8904_CHARGE_PUMP_0, 0, 0, cp_event,
+SND_SOC_DAPM_SUPPLY("Charge pump", WM8904_CHARGE_PUMP_0, 0, 0, NULL,
 		    SND_SOC_DAPM_POST_PMU),
 
 SND_SOC_DAPM_PGA("HPL PGA", SND_SOC_NOPM, 1, 0, NULL, 0),
@@ -977,11 +1241,11 @@ SND_SOC_DAPM_PGA("LINEL PGA", SND_SOC_NOPM, 1, 0, NULL, 0),
 SND_SOC_DAPM_PGA("LINER PGA", SND_SOC_NOPM, 0, 0, NULL, 0),
 
 SND_SOC_DAPM_PGA_E("Headphone Output", SND_SOC_NOPM, WM8904_ANALOGUE_HP_0,
-		   0, NULL, 0, out_pga_event,
+		   0, NULL, 0, NULL,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 SND_SOC_DAPM_PGA_E("Line Output", SND_SOC_NOPM, WM8904_ANALOGUE_LINEOUT_0,
-		   0, NULL, 0, out_pga_event,
+		   0, NULL, 0, NULL,
 		   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 		   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
@@ -1161,11 +1425,14 @@ static const struct snd_soc_dapm_route wm8912_intercon[] = {
 
 static int wm8904_add_widgets(struct snd_soc_codec *codec)
 {
+
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
-
-	snd_soc_dapm_new_controls(dapm, wm8904_core_dapm_widgets,
-				  ARRAY_SIZE(wm8904_core_dapm_widgets));
+//printk("add widgets\n");
+    //Disabling dapm widgets as it was latching the analog lines to tristate, resulting in noise
+    //anyways, the majour functionality of this is handled once in initialisation.
+	//snd_soc_dapm_new_controls(dapm, wm8904_core_dapm_widgets,
+	//		  ARRAY_SIZE(wm8904_core_dapm_widgets));
 	snd_soc_dapm_add_routes(dapm, core_intercon,
 				ARRAY_SIZE(core_intercon));
 
@@ -1240,6 +1507,7 @@ static struct {
 	{ 32000, 4  },
 	{ 44100, 5  },
 	{ 48000, 5  },
+	{ 96000, 6  },
 };
 
 static struct {
@@ -1274,6 +1542,8 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 			    struct snd_soc_dai *dai)
 {
 	struct snd_soc_codec *codec = dai->codec;
+
+	printk("Libresnd wm8904_hw_params \n ");
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int ret, i, best, best_val, cur_val;
 	unsigned int aif1 = 0;
@@ -1282,6 +1552,31 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 	unsigned int clock1 = 0;
 	unsigned int dac_digital1 = 0;
 
+	/* check for format and set the codec register */
+	switch (params_format(params)) {
+		case SNDRV_PCM_FORMAT_S16_LE:
+			break;
+		case SNDRV_PCM_FORMAT_S20_3LE:
+			aif1 |= 0x40;
+			break;
+		case SNDRV_PCM_FORMAT_S24_LE:
+			aif1 |= 0x80;
+			break;
+		case SNDRV_PCM_FORMAT_S32_LE:
+		//	aif1 |= 0xc0;
+			aif1 |= 0x8; //24-bit data HD
+			break;
+		default:
+			printk("*** Anoop Default\n");
+			return -EINVAL;
+		}
+	snd_soc_update_bits(codec, WM8904_AUDIO_INTERFACE_1,
+			    WM8904_AIF_WL_MASK ,aif1);
+	
+	return 0;
+	
+	if(!v_wm8904)
+	return 0;
 	/* What BCLK do we need? */
 	wm8904->fs = params_rate(params);
 	if (wm8904->tdm_slots) {
@@ -1293,7 +1588,7 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 	} else {
 		wm8904->bclk = snd_soc_params_to_bclk(params);
 	}
-
+	#if 0
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
 		break;
@@ -1307,12 +1602,11 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 		aif1 |= 0xc0;
 		break;
 	default:
+		printk("***  Default\n");
 		return -EINVAL;
 	}
-
-
-	dev_dbg(codec->dev, "Target BCLK is %dHz\n", wm8904->bclk);
-
+	#endif
+	printk(" Target BCLK is %dHz\n", wm8904->bclk);
 	ret = wm8904_configure_clocking(codec);
 	if (ret != 0)
 		return ret;
@@ -1347,6 +1641,7 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 	}
 	dev_dbg(codec->dev, "Selected SAMPLE_RATE of %dHz\n",
 		sample_rates[best].rate);
+	printk( "Selected SAMPLE_RATE of %dHz\n",sample_rates[best].rate);
 	clock1 |= (sample_rates[best].sample_rate
 		   << WM8904_SAMPLE_RATE_SHIFT);
 
@@ -1393,6 +1688,8 @@ static int wm8904_hw_params(struct snd_pcm_substream *substream,
 	wm8904_set_retune_mobile(codec);
 	wm8904_set_deemph(codec);
 
+
+
 	return 0;
 }
 
@@ -1402,7 +1699,11 @@ static int wm8904_set_sysclk(struct snd_soc_dai *dai, int clk_id,
 {
 	struct snd_soc_codec *codec = dai->codec;
 	struct wm8904_priv *priv = snd_soc_codec_get_drvdata(codec);
+	printk("Libresnd wm8904_set_sysclk\n");
 
+return 0;
+	if(!v_wm8904)
+	return 0;
 	switch (clk_id) {
 	case WM8904_CLK_MCLK:
 		priv->sysclk_src = clk_id;
@@ -1429,7 +1730,11 @@ static int wm8904_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 	struct snd_soc_codec *codec = dai->codec;
 	unsigned int aif1 = 0;
 	unsigned int aif3 = 0;
+	if(!v_wm8904)
+	return 0;
 
+	printk("Libre : wm8904_set_fmt\n");
+return 0;
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBS_CFS:
 		break;
@@ -1449,7 +1754,7 @@ static int wm8904_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_DSP_B:
-		aif1 |= WM8904_AIF_LRCLK_INV;
+		aif1 |= 0x3 | WM8904_AIF_LRCLK_INV;
 	case SND_SOC_DAIFMT_DSP_A:
 		aif1 |= 0x3;
 		break;
@@ -1519,7 +1824,9 @@ static int wm8904_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
 	struct snd_soc_codec *codec = dai->codec;
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int aif1 = 0;
-
+//printk("wm8904_set_tdm_slot\n");
+	if(!v_wm8904)
+	return 0;
 	/* Don't need to validate anything if we're turning off TDM */
 	if (slots == 0)
 		goto out;
@@ -1558,7 +1865,7 @@ out:
 	snd_soc_update_bits(codec, WM8904_AUDIO_INTERFACE_1,
 			    WM8904_AIFADC_TDM | WM8904_AIFADC_TDM_CHAN |
 			    WM8904_AIFDAC_TDM | WM8904_AIFDAC_TDM_CHAN, aif1);
-
+//printk("wm8904_set_tdm_slot end\n");
 	return 0;
 }
 
@@ -1594,6 +1901,8 @@ static int fll_factors(struct _fll_div *fll_div, unsigned int Fref,
 	unsigned int K, Ndiv, Nmod, target;
 	unsigned int div;
 	int i;
+	if(!v_wm8904)
+	return 0;
 
 	/* Fref must be <=13.5MHz */
 	div = 1;
@@ -1678,7 +1987,8 @@ static int wm8904_set_fll(struct snd_soc_dai *dai, int fll_id, int source,
 	struct _fll_div fll_div;
 	int ret, val;
 	int clock2, fll1;
-
+	if(!v_wm8904)
+	return 0;
 	/* Any change? */
 	if (source == wm8904->fll_src && Fref == wm8904->fll_fref &&
 	    Fout == wm8904->fll_fout)
@@ -1797,9 +2107,9 @@ static int wm8904_set_fll(struct snd_soc_dai *dai, int fll_id, int source,
 
 	/* Enable the FLL if it was previously active */
 	snd_soc_update_bits(codec, WM8904_FLL_CONTROL_1,
-			    WM8904_FLL_OSC_ENA, fll1);
+			    WM8904_FLL_OSC_ENA, WM8904_FLL_OSC_ENA);
 	snd_soc_update_bits(codec, WM8904_FLL_CONTROL_1,
-			    WM8904_FLL_ENA, fll1);
+			    WM8904_FLL_ENA, WM8904_FLL_ENA);
 
 out:
 	/* Reenable SYSCLK if it was previously active */
@@ -1811,13 +2121,34 @@ out:
 
 static int wm8904_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 {
+	if(!v_wm8904)
+	return 0;
+
+
+return 0;
 	struct snd_soc_codec *codec = codec_dai->codec;
 	int val;
 
+
 	if (mute)
+	{
+		printk("Libresnd wm8904_digital_mute\n");
 		val = WM8904_DAC_MUTE;
+		snd_soc_write(codec, 0x21,1<<3|1<<9|1<<10);
+		snd_soc_write(codec, 0x1e,0x100);
+		snd_soc_write(codec, 0x1f,0x100);
+
+	}
 	else
+	{
+		printk("Libresnd wm8904_digital_unmute\n");
 		val = 0;
+		snd_soc_write(codec, 0x21,0<<3|1<<9|1<<10);
+		snd_soc_write(codec, 0x1e,0x1c0);
+		snd_soc_write(codec, 0x1f,0x1c0);
+
+	}
+
 
 	snd_soc_update_bits(codec, WM8904_DAC_DIGITAL_1, WM8904_DAC_MUTE, val);
 
@@ -1827,9 +2158,15 @@ static int wm8904_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 static int wm8904_set_bias_level(struct snd_soc_codec *codec,
 				 enum snd_soc_bias_level level)
 {
+
+
+				printk("Libre : LS6 wm8904_set_bias_level\n");
+
+
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int ret;
-
+	if(!v_wm8904)
+	return 0;
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 		break;
@@ -1847,6 +2184,7 @@ static int wm8904_set_bias_level(struct snd_soc_codec *codec,
 
 	case SND_SOC_BIAS_STANDBY:
 		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
+			#if 0
 			ret = regulator_bulk_enable(ARRAY_SIZE(wm8904->supplies),
 						    wm8904->supplies);
 			if (ret != 0) {
@@ -1855,6 +2193,8 @@ static int wm8904_set_bias_level(struct snd_soc_codec *codec,
 					ret);
 				return ret;
 			}
+			#endif
+			printk("Libre : wm8904_set_bias_level SND_SOC_BIAS_STANDBY1111111111111\n");
 
 			regcache_cache_only(wm8904->regmap, false);
 			regcache_sync(wm8904->regmap);
@@ -1896,15 +2236,15 @@ static int wm8904_set_bias_level(struct snd_soc_codec *codec,
 		regcache_cache_only(wm8904->regmap, true);
 		regcache_mark_dirty(wm8904->regmap);
 
-		regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies),
-				       wm8904->supplies);
+		//regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies),
+			//	       wm8904->supplies);
 		break;
 	}
 	codec->dapm.bias_level = level;
 	return 0;
 }
 
-#define WM8904_RATES SNDRV_PCM_RATE_8000_96000
+#define WM8904_RATES SNDRV_PCM_RATE_8000_192000
 
 #define WM8904_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
@@ -1949,6 +2289,7 @@ static void wm8904_handle_retune_mobile_pdata(struct snd_soc_codec *codec)
 			     wm8904_put_retune_mobile_enum);
 	int ret, i, j;
 	const char **t;
+//printk("wm8904_set_bias_level1\n");
 
 	/* We need an array of texts for the enum API but the number
 	 * of texts is likely to be less than the number of
@@ -1997,10 +2338,11 @@ static void wm8904_handle_retune_mobile_pdata(struct snd_soc_codec *codec)
 
 static void wm8904_handle_pdata(struct snd_soc_codec *codec)
 {
+	printk("wm8904_set_bias_level2\n");
+
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	struct wm8904_pdata *pdata = wm8904->pdata;
 	int ret, i;
-
 	if (!pdata) {
 		snd_soc_add_codec_controls(codec, wm8904_eq_controls,
 				     ARRAY_SIZE(wm8904_eq_controls));
@@ -2049,12 +2391,16 @@ static void wm8904_handle_pdata(struct snd_soc_codec *codec)
 }
 
 
+#if 0
 static int wm8904_probe(struct snd_soc_codec *codec)
 {
+
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
 	int ret;
-
+    printk("Libresndwm8904_probe\n");
 	codec->control_data = wm8904->regmap;
+	if(!v_wm8904)
+	return 0;
 
 	switch (wm8904->devtype) {
 	case WM8904:
@@ -2077,13 +2423,139 @@ static int wm8904_probe(struct snd_soc_codec *codec)
 	wm8904_handle_pdata(codec);
 
 	wm8904_add_widgets(codec);
+	out_pga_event_bootTime(codec,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_PRE_PMU);
+	out_pga_event_bootTime(codec,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_POST_PMU);
+
+
+	out_pga_event_bootTime(codec,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_PRE_PMU);
+	out_pga_event_bootTime(codec,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_POST_PMU);
+
+
+	wm8904_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	wm8904_set_bias_level(codec, SND_SOC_BIAS_PREPARE);
+
+/*
+	regmap_update_bits(wm8904->regmap, WM8904_POWER_MANAGEMENT_6 , 0xF, 0xF);
+			  
+	regmap_update_bits(wm8904->regmap, WM8904_CHARGE_PUMP_0 , 0x1, 0x1);
+			  
+	regmap_update_bits(wm8904->regmap, WM8904_POWER_MANAGEMENT_0 , 0x3, 0x3);
+			  
+*/			
 
 	return 0;
 }
+#endif
 
+static struct wm8904_priv *wm8904_tmp;
+static struct snd_soc_codec *codec_reg;
+
+int check_hw_param()
+{
+int ret,i,reg_read;
+	ret = wm8904_configure_clocking(codec_reg);
+	
+			if (ret != 0)
+			{
+				printk("Libre : Configure clocking failed\n");
+			}
+	
+#if 1
+			printk("Libre : out_pga_event_bootTime starts\n");
+			out_pga_event_bootTime(codec_reg,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_PRE_PMU);
+			out_pga_event_bootTime(codec_reg,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_POST_PMU);
+			out_pga_event_bootTime(codec_reg,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_PRE_PMU);
+			out_pga_event_bootTime(codec_reg,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_POST_PMU);
+			wm8904_set_bias_level(codec_reg, SND_SOC_BIAS_STANDBY);
+			wm8904_set_bias_level(codec_reg, SND_SOC_BIAS_PREPARE);
+			regmap_update_bits(wm8904_tmp->regmap, WM8904_POWER_MANAGEMENT_6 , 0xF, 0xF);
+			regmap_update_bits(wm8904_tmp->regmap, WM8904_CHARGE_PUMP_0 , 0x1, 0x1);
+			regmap_update_bits(wm8904_tmp->regmap, WM8904_POWER_MANAGEMENT_0 , 0x3, 0x3);
+			
+#endif
+	
+	
+	
+		/*	for( i = 0;i < 248;i++)
+				{
+					reg_read = snd_soc_read(codec_reg, i);
+					printk("Libre : Reg Values [%x] : 0x%x\n",i,reg_read);
+					
+				}*/
+
+return 0;
+}
+//static struct snd_soc_codec *codec_reg;
+static int wm8904_probe(struct snd_soc_codec *codec)
+{
+
+
+	printk("Libre : wm8904 codec probe\n");
+	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
+	wm8904_tmp = wm8904;
+	int ret,reg_read,i;
+	codec_reg = codec;
+
+	codec->control_data = wm8904->regmap;
+
+	switch (wm8904->devtype) {
+	case WM8904:
+		break;
+	case WM8912:
+		memset(&wm8904_dai.capture, 0, sizeof(wm8904_dai.capture));
+		break;
+	default:
+		dev_err(codec->dev, "Unknown device type %d\n",
+			wm8904->devtype);
+		return -EINVAL;
+	}
+
+	ret = snd_soc_codec_set_cache_io(codec, 8, 16, SND_SOC_REGMAP);
+	if (ret != 0) {
+		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
+		return ret;
+	}
+
+	wm8904_handle_pdata(codec);
+		wm8904_add_widgets(codec);
+	ret = wm8904_configure_clocking(codec);
+
+#if 1
+		printk("Libre : out_pga_event_bootTime starts\n");
+		out_pga_event_bootTime(codec,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_PRE_PMU);
+		out_pga_event_bootTime(codec,WM8904_ANALOGUE_HP_0,SND_SOC_DAPM_POST_PMU);
+		out_pga_event_bootTime(codec,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_PRE_PMU);
+		out_pga_event_bootTime(codec,WM8904_ANALOGUE_LINEOUT_0,SND_SOC_DAPM_POST_PMU);
+		wm8904_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+		wm8904_set_bias_level(codec, SND_SOC_BIAS_PREPARE);
+		/*regmap_update_bits(wm8904->regmap, WM8904_POWER_MANAGEMENT_6 , 0xF, 0xF);
+		regmap_update_bits(wm8904->regmap, WM8904_CHARGE_PUMP_0 , 0x1, 0x1);
+		regmap_update_bits(wm8904->regmap, WM8904_POWER_MANAGEMENT_0 , 0x3, 0x3);
+		*/
+#endif
+
+
+
+		if (ret != 0)
+		{
+			printk("Libre : Configure clocking failed\n");
+		}
+		/*for( i = 0;i < 248;i++)
+			{
+				reg_read = snd_soc_read(codec, i);
+				printk("Libre : Reg Values [%x] : 0x%x\n",i,reg_read);
+				
+			}*/
+
+	//reg_codec();
+	
+
+	return 0;
+}
 static int wm8904_remove(struct snd_soc_codec *codec)
 {
 	struct wm8904_priv *wm8904 = snd_soc_codec_get_drvdata(codec);
+//printk("wm8904_set_bias_level3\n");
 
 	kfree(wm8904->retune_mobile_texts);
 	kfree(wm8904->drc_texts);
@@ -2091,10 +2563,13 @@ static int wm8904_remove(struct snd_soc_codec *codec)
 	return 0;
 }
 
+
+
+
 static struct snd_soc_codec_driver soc_codec_dev_wm8904 = {
 	.probe =	wm8904_probe,
 	.remove =	wm8904_remove,
-	.set_bias_level = wm8904_set_bias_level,
+	//.set_bias_level = wm8904_set_bias_level,
 	.idle_bias_off = true,
 };
 
@@ -2114,10 +2589,12 @@ static const struct regmap_config wm8904_regmap = {
 static int wm8904_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
+
+
 	struct wm8904_priv *wm8904;
 	unsigned int val;
 	int ret, i;
-
+	printk("Libresnd wm8904_i2c_probe\n");
 	wm8904 = devm_kzalloc(&i2c->dev, sizeof(struct wm8904_priv),
 			      GFP_KERNEL);
 	if (wm8904 == NULL)
@@ -2135,32 +2612,64 @@ static int wm8904_i2c_probe(struct i2c_client *i2c,
 	i2c_set_clientdata(i2c, wm8904);
 	wm8904->pdata = i2c->dev.platform_data;
 
-	for (i = 0; i < ARRAY_SIZE(wm8904->supplies); i++)
-		wm8904->supplies[i].supply = wm8904_supply_names[i];
+	
+	//for (i = 0; i < ARRAY_SIZE(wm8904->supplies); i++)
+	//	wm8904->supplies[i].supply = wm8904_supply_names[i];
 
-	ret = devm_regulator_bulk_get(&i2c->dev, ARRAY_SIZE(wm8904->supplies),
-				      wm8904->supplies);
-	if (ret != 0) {
-		dev_err(&i2c->dev, "Failed to request supplies: %d\n", ret);
-		return ret;
-	}
+	//ret = devm_regulator_bulk_get(&i2c->dev, ARRAY_SIZE(wm8904->supplies),wm8904->supplies);
+	//if (ret != 0) {
+	//	dev_err(&i2c->dev, "Failed to request supplies: %d\n", ret);
+	//	return ret;
+	//}
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(wm8904->supplies),
-				    wm8904->supplies);
-	if (ret != 0) {
-		dev_err(&i2c->dev, "Failed to enable supplies: %d\n", ret);
-		return ret;
-	}
+	//ret = regulator_bulk_enable(ARRAY_SIZE(wm8904->supplies),wm8904->supplies);
+	//if (ret != 0) {
+	//	dev_err(&i2c->dev, "Failed to enable supplies: %d\n", ret);
+	//	return ret;
+	//}
+	
+	ret = regmap_write(wm8904->regmap, WM8904_DAC_DIGITAL_1, 1<<3);
 
-	ret = regmap_read(wm8904->regmap, WM8904_SW_RESET_AND_ID, &val);
+	ret = regmap_write(wm8904->regmap, WM8904_SW_RESET_AND_ID, 0);
 	if (ret < 0) {
-		dev_err(&i2c->dev, "Failed to read ID register: %d\n", ret);
-		goto err_enable;
+		dev_err(&i2c->dev, "Failed to issue reset: %d\n", ret);
+		//goto err_enable;
 	}
+
+	ret = regmap_write(wm8904->regmap, WM8904_MIC_BIAS_CONTROL_0, 0x01);
+	
+	if (ret < 0) {
+		dev_err(&i2c->dev, "Failed to set mic_bias0: %d\n", ret);
+		//goto err_enable;
+	}
+
+	
+	ret = regmap_write(wm8904->regmap, WM8904_MIC_BIAS_CONTROL_1, 0x07);
+		
+		if (ret < 0) {
+			dev_err(&i2c->dev, "Failed to set mic_bias1: %d\n", ret);
+			//goto err_enable;
+		}
+	val=0;
+	ret = regmap_read(wm8904->regmap, WM8904_SW_RESET_AND_ID, &val);
+	
+	
+
 	if (val != 0x8904) {
-		dev_err(&i2c->dev, "Device is not a WM8904, ID is %x\n", val);
-		ret = -EINVAL;
-		goto err_enable;
+		v_wm8904=0;
+		regcache_cache_only(wm8904->regmap, true);
+		//regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies), wm8904->supplies);
+		ret = snd_soc_register_codec(&i2c->dev,
+			&soc_codec_dev_wm8904, &wm8904_dai, 1);
+		if (ret != 0)
+		{
+		printk("\n");
+		return ret;
+		}
+		if(val != 0x8904 )
+		  printk("Could not read wm8904 codec\n");
+		
+		return 0;
 	}
 
 	ret = regmap_read(wm8904->regmap, WM8904_REVISION, &val);
@@ -2171,17 +2680,14 @@ static int wm8904_i2c_probe(struct i2c_client *i2c,
 	}
 	dev_info(&i2c->dev, "revision %c\n", val + 'A');
 
-	ret = regmap_write(wm8904->regmap, WM8904_SW_RESET_AND_ID, 0);
-	if (ret < 0) {
-		dev_err(&i2c->dev, "Failed to issue reset: %d\n", ret);
-		goto err_enable;
-	}
 
 	/* Change some default settings - latch VU and enable ZC */
 	regmap_update_bits(wm8904->regmap, WM8904_ADC_DIGITAL_VOLUME_LEFT,
 			   WM8904_ADC_VU, WM8904_ADC_VU);
 	regmap_update_bits(wm8904->regmap, WM8904_ADC_DIGITAL_VOLUME_RIGHT,
 			   WM8904_ADC_VU, WM8904_ADC_VU);
+	regmap_update_bits(wm8904->regmap, WM8904_DAC_DIGITAL_1 ,
+			   WM8904_DAC_MUTE, WM8904_DAC_MUTE);
 	regmap_update_bits(wm8904->regmap, WM8904_DAC_DIGITAL_VOLUME_LEFT,
 			   WM8904_DAC_VU, WM8904_DAC_VU);
 	regmap_update_bits(wm8904->regmap, WM8904_DAC_DIGITAL_VOLUME_RIGHT,
@@ -2200,6 +2706,13 @@ static int wm8904_i2c_probe(struct i2c_client *i2c,
 			   WM8904_LINEOUT_VU | WM8904_LINEOUTRZC);
 	regmap_update_bits(wm8904->regmap, WM8904_CLOCK_RATES_0,
 			   WM8904_SR_MODE, 0);
+
+
+	regmap_update_bits(wm8904->regmap, 0x2e,
+			   0x54, 0x54);
+	regmap_update_bits(wm8904->regmap, 0x2f,
+			   0x54, 0x54);
+
 
 	/* Apply configuration from the platform data. */
 	if (wm8904->pdata) {
@@ -2231,9 +2744,12 @@ static int wm8904_i2c_probe(struct i2c_client *i2c,
 	regmap_update_bits(wm8904->regmap, WM8904_BIAS_CONTROL_0,
 			    WM8904_POBCTRL, 0);
 
+
+
+
 	/* Can leave the device powered off until we need it */
 	regcache_cache_only(wm8904->regmap, true);
-	regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies), wm8904->supplies);
+	//regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies), wm8904->supplies);
 
 	ret = snd_soc_register_codec(&i2c->dev,
 			&soc_codec_dev_wm8904, &wm8904_dai, 1);
@@ -2243,7 +2759,8 @@ static int wm8904_i2c_probe(struct i2c_client *i2c,
 	return 0;
 
 err_enable:
-	regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies), wm8904->supplies);
+	printk("------In Error enable\n");
+	//regulator_bulk_disable(ARRAY_SIZE(wm8904->supplies), wm8904->supplies);
 	return ret;
 }
 

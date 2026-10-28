@@ -183,6 +183,7 @@ int usb_add_function(struct usb_configuration *config,
 		goto done;
 
 	function->config = config;
+
 	list_add_tail(&function->list, &config->functions);
 
 	/* REVISIT *require* function->bind? */
@@ -214,6 +215,20 @@ done:
 	return value;
 }
 EXPORT_SYMBOL_GPL(usb_add_function);
+
+void usb_remove_function(struct usb_configuration *c, struct usb_function *f)
+{
+	printk("disable %pF, unbind %pF \n", f->disable, f->unbind);
+	if (f->disable)
+		f->disable(f);
+
+	bitmap_zero(f->endpoints, 32);
+
+	list_del(&f->list);
+	if (f->unbind)
+		f->unbind(c, f);
+}
+EXPORT_SYMBOL_GPL(usb_remove_function);
 
 /**
  * usb_function_deactivate - prevent function and gadget enumeration

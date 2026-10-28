@@ -35,6 +35,7 @@
 #include <sound/timer.h>
 #include <sound/minors.h>
 #include <asm/io.h>
+
 #if defined(CONFIG_MIPS) && defined(CONFIG_DMA_NONCOHERENT)
 #include <dma-coherence.h>
 #endif
@@ -42,7 +43,6 @@
 /*
  *  Compatibility
  */
-
 struct snd_pcm_hw_params_old {
 	unsigned int flags;
 	unsigned int masks[SNDRV_PCM_HW_PARAM_SUBFORMAT -
@@ -721,6 +721,7 @@ static int snd_pcm_action_group(struct action_ops *ops,
 	struct snd_pcm_substream *s1;
 	int res = 0;
 
+
 	snd_pcm_group_for_each_entry(s, substream) {
 		if (do_lock && s != substream)
 			spin_lock_nested(&s->self_group.lock,
@@ -850,11 +851,17 @@ static int snd_pcm_action_nonatomic(struct action_ops *ops,
 static int snd_pcm_pre_start(struct snd_pcm_substream *substream, int state)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	
 	if (runtime->status->state != SNDRV_PCM_STATE_PREPARED)
+	{
+	    printk("LibreSnd Err snd_pcm_pre_start failed, current state is %d \n",runtime->status->state);
 		return -EBADFD;
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-	    !snd_pcm_playback_data(substream))
+	}
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK && !snd_pcm_playback_data(substream))
+	{
+		printk("LibreSnd Err snd_pcm_pre_start failed,Not enough Playbackdata\n");
 		return -EPIPE;
+	}
 	runtime->trigger_master = substream;
 	return 0;
 }
@@ -894,6 +901,8 @@ static struct action_ops snd_pcm_action_start = {
 	.undo_action = snd_pcm_undo_start,
 	.post_action = snd_pcm_post_start
 };
+
+
 
 /**
  * snd_pcm_start - start all linked streams
@@ -1224,7 +1233,7 @@ static int snd_pcm_xrun(struct snd_pcm_substream *substream)
 	struct snd_card *card = substream->pcm->card;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int result;
-
+    printk("LibreSnd Err snd_pcm_xrun state is %d\n",runtime->status->state);
 	snd_power_lock(card);
 	if (runtime->status->state == SNDRV_PCM_STATE_SUSPENDED) {
 		result = snd_power_wait(card, SNDRV_CTL_POWER_D0);
@@ -1285,9 +1294,11 @@ static void snd_pcm_post_reset(struct snd_pcm_substream *substream, int state)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	runtime->control->appl_ptr = runtime->status->hw_ptr;
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
-	    runtime->silence_size > 0)
-		snd_pcm_playback_silence(substream, ULONG_MAX);
-}
+	    runtime->silence_size > 0){
+			printk("LibreSnd Err Lat Post reset play silence");
+			snd_pcm_playback_silence(substream, ULONG_MAX);
+		} 
+	}
 
 static struct action_ops snd_pcm_action_reset = {
 	.pre_action = snd_pcm_pre_reset,
@@ -1309,10 +1320,15 @@ static int snd_pcm_pre_prepare(struct snd_pcm_substream *substream,
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	if (runtime->status->state == SNDRV_PCM_STATE_OPEN ||
-	    runtime->status->state == SNDRV_PCM_STATE_DISCONNECTED)
+	    runtime->status->state == SNDRV_PCM_STATE_DISCONNECTED) {
+		printk("LibreSnd Err Pre_prepare failed OPEN?DISC?\n");
 		return -EBADFD;
-	if (snd_pcm_running(substream))
+	}
+	if (snd_pcm_running(substream)){
+		
+		printk("LibreSnd  Err Pre_prepare failed RUNNING?\n");
 		return -EBUSY;
+	}
 	substream->f_flags = f_flags;
 	return 0;
 }
@@ -1323,6 +1339,8 @@ static int snd_pcm_do_prepare(struct snd_pcm_substream *substream, int state)
 	err = substream->ops->prepare(substream);
 	if (err < 0)
 		return err;
+	
+	printk("Libresnd snd_pcm_DOO_prepare b4 ret\n");
 	return snd_pcm_do_reset(substream, 0);
 }
 
@@ -1528,7 +1546,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
 			if (substream->runtime->status->state == SNDRV_PCM_STATE_SUSPENDED)
 				result = -ESTRPIPE;
 			else {
-				snd_printd("playback drain error (DMA or IRQ trouble?)\n");
+				printk(" LibreSnd Err playback drain error (DMA or IRQ trouble?)\n");
 				snd_pcm_stop(substream, SNDRV_PCM_STATE_SETUP);
 				result = -EIO;
 			}
@@ -2544,6 +2562,8 @@ static int snd_pcm_common_ioctl1(struct file *file,
 				 struct snd_pcm_substream *substream,
 				 unsigned int cmd, void __user *arg)
 {
+	
+
 	switch (cmd) {
 	case SNDRV_PCM_IOCTL_PVERSION:
 		return put_user(SNDRV_PCM_VERSION, (int __user *)arg) ? -EFAULT : 0;
@@ -3222,18 +3242,10 @@ EXPORT_SYMBOL_GPL(snd_pcm_lib_default_mmap);
 int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream,
 			   struct vm_area_struct *area)
 {
-	long size;
-	unsigned long offset;
+	struct snd_pcm_runtime *runtime = substream->runtime;;
 
 	area->vm_page_prot = pgprot_noncached(area->vm_page_prot);
-	area->vm_flags |= VM_IO;
-	size = area->vm_end - area->vm_start;
-	offset = area->vm_pgoff << PAGE_SHIFT;
-	if (io_remap_pfn_range(area, area->vm_start,
-				(substream->runtime->dma_addr + offset) >> PAGE_SHIFT,
-				size, area->vm_page_prot))
-		return -EAGAIN;
-	return 0;
+	return vm_iomap_memory(area, runtime->dma_addr, runtime->dma_bytes);
 }
 
 EXPORT_SYMBOL(snd_pcm_lib_mmap_iomem);
